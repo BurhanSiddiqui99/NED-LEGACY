@@ -21,6 +21,7 @@ import {
   Calendar,
 } from "lucide-react";
 import Link from "next/link";
+import { GoogleMapTracker } from "@/components/maps/google-map-tracker";
 
 export default function AdminOrderDetailPage() {
   const params = useParams();
@@ -99,6 +100,38 @@ export default function AdminOrderDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Timeline & Route */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Live Google Maps Master Telemetry */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-900 dark:text-white">
+                Live Google Maps Fleet Telemetry Radar
+              </span>
+              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+                Master Admin View
+              </span>
+            </div>
+            <GoogleMapTracker
+              pickupLocation={order.pickupLocation}
+              pickupAddress={order.pickupAddress}
+              deliveryLocation={order.deliveryLocation}
+              deliveryAddress={order.deliveryAddress}
+              riderLocation={
+                order.currentRiderLocation ||
+                (order.riderId && order.status !== "delivered" && order.status !== "cancelled"
+                  ? {
+                      latitude: (order.pickupLocation.latitude + order.deliveryLocation.latitude) / 2,
+                      longitude: (order.pickupLocation.longitude + order.deliveryLocation.longitude) / 2,
+                    }
+                  : null)
+              }
+              riderName={order.riderName}
+              status={order.status}
+              height="360px"
+              interactive={true}
+            />
+          </div>
+
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
             <h2 className="font-bold text-sm text-slate-900 dark:text-white mb-2">
               Delivery Milestones Tracking

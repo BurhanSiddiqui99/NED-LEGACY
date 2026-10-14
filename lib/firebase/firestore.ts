@@ -79,26 +79,52 @@ export async function createOrder(
   return newOrder;
 }
 
+function sortOrdersDesc(orders: Order[]): Order[] {
+  return [...orders].sort((a, b) => {
+    const getTime = (val: any) => {
+      if (!val) return 0;
+      if (typeof val.toMillis === "function") return val.toMillis();
+      if (typeof val.toDate === "function") return val.toDate().getTime();
+      if (typeof val.seconds === "number") return val.seconds * 1000;
+      const t = new Date(val).getTime();
+      return isNaN(t) ? 0 : t;
+    };
+    return getTime(b.createdAt || b.updatedAt) - getTime(a.createdAt || a.updatedAt);
+  });
+}
+
 export async function getOrderById(orderId: string): Promise<Order | null> {
   if (isFirebaseConfigured && db) {
-    const snap = await getDoc(doc(db, "orders", orderId));
-    if (snap.exists()) {
-      return snap.data() as Order;
+    try {
+      const snap = await getDoc(doc(db, "orders", orderId));
+      if (snap.exists()) {
+        const data = snap.data();
+        return { ...data, id: data.id || snap.id } as Order;
+      }
+    } catch (err) {
+      console.error("Firestore getOrderById error:", err);
     }
-    return null;
   }
   return MockStore.getOrder(orderId);
 }
 
 export function subscribeToOrder(orderId: string, callback: (order: Order | null) => void): Unsubscribe {
   if (isFirebaseConfigured && db) {
-    return onSnapshot(doc(db, "orders", orderId), (snap) => {
-      if (snap.exists()) {
-        callback(snap.data() as Order);
-      } else {
+    return onSnapshot(
+      doc(db, "orders", orderId),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          callback({ ...data, id: data.id || snap.id } as Order);
+        } else {
+          callback(null);
+        }
+      },
+      (err) => {
+        console.error("Firestore subscribeToOrder error:", err);
         callback(null);
       }
-    });
+    );
   }
 
   // Mock store subscription
@@ -114,20 +140,36 @@ export function subscribeToCustomerOrders(
   callback: (orders: Order[]) => void
 ): Unsubscribe {
   if (isFirebaseConfigured && db) {
+    // Note: Querying without orderBy prevents requiring composite indexes in Firestore
     const q = query(
       collection(db, "orders"),
-      where("customerId", "==", customerId),
-      orderBy("createdAt", "desc")
+      where("customerId", "==", customerId)
     );
-    return onSnapshot(q, (snap) => {
-      const orders = snap.docs.map((d) => d.data() as Order);
-      callback(orders);
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        const orders = snap.docs.map(
+          (d) => ({ ...d.data(), id: d.data().id || d.id } as Order)
+        );
+        callback(sortOrdersDesc(orders));
+      },
+      (err) => {
+        console.error("Firestore subscribeToCustomerOrders error:", err);
+        getDocs(collection(db, "orders"))
+          .then((snap) => {
+            const all = snap.docs
+              .map((d) => ({ ...d.data(), id: d.data().id || d.id } as Order))
+              .filter((o) => o.customerId === customerId);
+            callback(sortOrdersDesc(all));
+          })
+          .catch((e) => console.error("Fallback getDocs error:", e));
+      }
+    );
   }
 
   const update = () => {
     const orders = MockStore.getOrders().filter((o) => o.customerId === customerId);
-    callback(orders);
+    callback(sortOrdersDesc(orders));
   };
   update();
   return MockStore.subscribe(update);
@@ -135,20 +177,46 @@ export function subscribeToCustomerOrders(
 
 export function subscribeToAvailableOrders(callback: (orders: Order[]) => void): Unsubscribe {
   if (isFirebaseConfigured && db) {
+    // Single where without riderId filter avoids multi-field index requirement
     const q = query(
       collection(db, "orders"),
-      where("status", "==", "pending"),
-      where("riderId", "==", null)
+      where("status", "==", "pending")
     );
-    return onSnapshot(q, (snap) => {
-      const orders = snap.docs.map((d) => d.data() as Order);
-      callback(orders);
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        const orders = snap.docs
+          .map((d) => ({ ...d.data(), id: d.data().id || d.id } as Order))
+          .filter(
+            (o) =>
+              o.status === "pending" &&
+              (!o.riderId || o.riderId === null || o.riderId === "" || o.riderId === "unassigned")
+          );
+        callback(sortOrdersDesc(orders));
+      },
+      (err) => {
+        console.error("Firestore subscribeToAvailableOrders error:", err);
+        getDocs(collection(db, "orders"))
+          .then((snap) => {
+            const available = snap.docs
+              .map((d) => ({ ...d.data(), id: d.data().id || d.id } as Order))
+              .filter(
+                (o) =>
+                  o.status === "pending" &&
+                  (!o.riderId || o.riderId === null || o.riderId === "" || o.riderId === "unassigned")
+              );
+            callback(sortOrdersDesc(available));
+          })
+          .catch((e) => console.error("Fallback available orders error:", e));
+      }
+    );
   }
 
   const update = () => {
-    const orders = MockStore.getOrders().filter((o) => o.status === "pending" && !o.riderId);
-    callback(orders);
+    const orders = MockStore.getOrders().filter(
+      (o) => o.status === "pending" && (!o.riderId || o.riderId === null || o.riderId === "")
+    );
+    callback(sortOrdersDesc(orders));
   };
   update();
   return MockStore.subscribe(update);
@@ -159,20 +227,36 @@ export function subscribeToRiderOrders(
   callback: (orders: Order[]) => void
 ): Unsubscribe {
   if (isFirebaseConfigured && db) {
+    // Single where filter without orderBy to prevent composite index requirement
     const q = query(
       collection(db, "orders"),
-      where("riderId", "==", riderId),
-      orderBy("updatedAt", "desc")
+      where("riderId", "==", riderId)
     );
-    return onSnapshot(q, (snap) => {
-      const orders = snap.docs.map((d) => d.data() as Order);
-      callback(orders);
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        const orders = snap.docs.map(
+          (d) => ({ ...d.data(), id: d.data().id || d.id } as Order)
+        );
+        callback(sortOrdersDesc(orders));
+      },
+      (err) => {
+        console.error("Firestore subscribeToRiderOrders error:", err);
+        getDocs(collection(db, "orders"))
+          .then((snap) => {
+            const assigned = snap.docs
+              .map((d) => ({ ...d.data(), id: d.data().id || d.id } as Order))
+              .filter((o) => o.riderId === riderId);
+            callback(sortOrdersDesc(assigned));
+          })
+          .catch((e) => console.error("Fallback rider orders error:", e));
+      }
+    );
   }
 
   const update = () => {
     const orders = MockStore.getOrders().filter((o) => o.riderId === riderId);
-    callback(orders);
+    callback(sortOrdersDesc(orders));
   };
   update();
   return MockStore.subscribe(update);
@@ -180,15 +264,32 @@ export function subscribeToRiderOrders(
 
 export function subscribeToAllOrders(callback: (orders: Order[]) => void): Unsubscribe {
   if (isFirebaseConfigured && db) {
-    const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-    return onSnapshot(q, (snap) => {
-      const orders = snap.docs.map((d) => d.data() as Order);
-      callback(orders);
-    });
+    // Query collection directly so documents missing createdAt are NOT dropped
+    const q = collection(db, "orders");
+    return onSnapshot(
+      q,
+      (snap) => {
+        const orders = snap.docs.map(
+          (d) => ({ ...d.data(), id: d.data().id || d.id } as Order)
+        );
+        callback(sortOrdersDesc(orders));
+      },
+      (err) => {
+        console.error("Firestore subscribeToAllOrders error:", err);
+        getDocs(collection(db, "orders"))
+          .then((snap) => {
+            const all = snap.docs.map(
+              (d) => ({ ...d.data(), id: d.data().id || d.id } as Order)
+            );
+            callback(sortOrdersDesc(all));
+          })
+          .catch((e) => console.error("Fallback all orders error:", e));
+      }
+    );
   }
 
   const update = () => {
-    callback(MockStore.getOrders());
+    callback(sortOrdersDesc(MockStore.getOrders()));
   };
   update();
   return MockStore.subscribe(update);
@@ -530,13 +631,23 @@ export function subscribeToMessages(
   if (isFirebaseConfigured && db) {
     const q = query(
       collection(db, "messages"),
-      where("orderId", "==", orderId),
-      orderBy("createdAt", "asc")
+      where("orderId", "==", orderId)
     );
-    return onSnapshot(q, (snap) => {
-      const msgs = snap.docs.map((d) => d.data() as Message);
-      callback(msgs);
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        const msgs = snap.docs.map((d) => ({ ...d.data(), id: d.data().id || d.id } as Message));
+        msgs.sort((a, b) => {
+          const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+          const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+          return tA - tB;
+        });
+        callback(msgs);
+      },
+      (err) => {
+        console.error("Firestore subscribeToMessages error:", err);
+      }
+    );
   }
 
   const update = () => {
@@ -580,13 +691,23 @@ export function subscribeToNotifications(
   if (isFirebaseConfigured && db) {
     const q = query(
       collection(db, "notifications"),
-      where("userId", "in", [userId, "all"]),
-      orderBy("createdAt", "desc")
+      where("userId", "in", [userId, "all"])
     );
-    return onSnapshot(q, (snap) => {
-      const notifs = snap.docs.map((d) => d.data() as AppNotification);
-      callback(notifs);
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        const notifs = snap.docs.map((d) => ({ ...d.data(), id: d.data().id || d.id } as AppNotification));
+        notifs.sort((a, b) => {
+          const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+          const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+          return tB - tA;
+        });
+        callback(notifs);
+      },
+      (err) => {
+        console.error("Firestore subscribeToNotifications error:", err);
+      }
+    );
   }
 
   const update = () => {

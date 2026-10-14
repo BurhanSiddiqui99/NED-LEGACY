@@ -19,7 +19,10 @@ import {
   MapPin,
   Clock,
   AlertCircle,
+  Map,
+  List,
 } from "lucide-react";
+import { AvailableOrdersMap } from "@/components/maps/available-orders-map";
 
 export default function AvailableOrdersPage() {
   const { user, riderProfile } = useAuth();
@@ -37,6 +40,7 @@ export default function AvailableOrdersPage() {
   const [distanceFilter, setDistanceFilter] = useState<string>("all"); // "all", "2km", "5km", "10km"
   const [sortBy, setSortBy] = useState<"nearest" | "newest">("nearest");
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
 
   useEffect(() => {
     const unsub = ordersService.subscribeAvailableOrders((data) => {
@@ -187,10 +191,44 @@ export default function AvailableOrdersPage() {
             <option value="newest">Newest Requested First</option>
           </select>
         </div>
+
+        {/* View Toggle */}
+        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl shrink-0">
+          <button
+            type="button"
+            onClick={() => setViewMode("list")}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+              viewMode === "list"
+                ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm"
+                : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <List className="w-3.5 h-3.5" />
+            <span>List</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("map")}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+              viewMode === "map"
+                ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm"
+                : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <Map className="w-3.5 h-3.5" />
+            <span>Google Map</span>
+          </button>
+        </div>
       </div>
 
-      {/* Available Orders Grid */}
-      {processedOrders.length === 0 ? (
+      {/* Available Orders: Map View or List View */}
+      {viewMode === "map" ? (
+        <AvailableOrdersMap
+          orders={processedOrders}
+          riderLocation={riderLocation}
+          height="540px"
+        />
+      ) : processedOrders.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 border border-slate-200 dark:border-slate-800 text-center text-slate-400">
           <Package className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
           <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">

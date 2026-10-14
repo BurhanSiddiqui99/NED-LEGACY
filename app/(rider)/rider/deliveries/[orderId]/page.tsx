@@ -22,6 +22,7 @@ import {
   Navigation,
 } from "lucide-react";
 import Link from "next/link";
+import { GoogleMapTracker } from "@/components/maps/google-map-tracker";
 
 export default function RiderDeliveryDetailPage() {
   const params = useParams();
@@ -112,6 +113,35 @@ export default function RiderDeliveryDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Tracking timeline & Address details */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Live Google Maps Radar */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-900 dark:text-white">
+                Live Google Maps Courier Navigation
+              </span>
+              <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-teal-500 animate-ping" />
+                Active GPS Telemetry
+              </span>
+            </div>
+            <GoogleMapTracker
+              pickupLocation={order.pickupLocation}
+              pickupAddress={order.pickupAddress}
+              deliveryLocation={order.deliveryLocation}
+              deliveryAddress={order.deliveryAddress}
+              riderLocation={
+                order.currentRiderLocation || {
+                  latitude: order.pickupLocation.latitude,
+                  longitude: order.pickupLocation.longitude,
+                }
+              }
+              riderName={order.riderName || "You"}
+              status={order.status}
+              height="360px"
+              interactive={true}
+            />
+          </div>
+
           {/* Milestone Action Controller */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
             <h2 className="font-bold text-sm text-slate-900 dark:text-white">

@@ -20,6 +20,8 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
+import { GooglePlaceSearchInput } from "@/components/maps/google-place-search-input";
+import { GoogleMapTracker } from "@/components/maps/google-map-tracker";
 
 export function CreateOrderForm() {
   const router = useRouter();
@@ -218,39 +220,18 @@ export function CreateOrderForm() {
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Select Predefined Karachi Landmark
-              </label>
-              <select
-                value={pickupPreset}
-                onChange={(e) => handlePickupChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                {KARACHI_LOCATIONS.map((loc) => (
-                  <option key={loc.id} value={loc.id}>
-                    {loc.name} ({loc.area})
-                  </option>
-                ))}
-                {pickupPreset === "custom" && <option value="custom">Current GPS Location</option>}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Detailed Pickup Address / Notes
-              </label>
-              <input
-                type="text"
-                value={pickupAddress}
-                onChange={(e) => setPickupAddress(e.target.value)}
-                required
-                className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-              <span className="text-[10px] text-slate-400 mt-1 block">
-                Lat: {pickupCoords.latitude.toFixed(4)}, Long: {pickupCoords.longitude.toFixed(4)}
-              </span>
-            </div>
+            <GooglePlaceSearchInput
+              id="pickup-address"
+              label="Pickup Location (Google Places Autocomplete)"
+              value={pickupAddress}
+              coords={pickupCoords}
+              onChange={(addr, coords) => {
+                setPickupAddress(addr);
+                setPickupCoords(coords);
+              }}
+              placeholder="Search Karachi address or click Hubs..."
+              iconType="pickup"
+            />
           </div>
 
           {/* Delivery Section */}
@@ -264,38 +245,18 @@ export function CreateOrderForm() {
               </h3>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Select Predefined Karachi Destination
-              </label>
-              <select
-                value={deliveryPreset}
-                onChange={(e) => handleDeliveryChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-              >
-                {KARACHI_LOCATIONS.map((loc) => (
-                  <option key={loc.id} value={loc.id}>
-                    {loc.name} ({loc.area})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Detailed Delivery Street & House/Office
-              </label>
-              <input
-                type="text"
-                value={deliveryAddress}
-                onChange={(e) => setDeliveryAddress(e.target.value)}
-                required
-                className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-              />
-              <span className="text-[10px] text-slate-400 mt-1 block">
-                Lat: {deliveryCoords.latitude.toFixed(4)}, Long: {deliveryCoords.longitude.toFixed(4)}
-              </span>
-            </div>
+            <GooglePlaceSearchInput
+              id="delivery-address"
+              label="Delivery Destination (Google Places Autocomplete)"
+              value={deliveryAddress}
+              coords={deliveryCoords}
+              onChange={(addr, coords) => {
+                setDeliveryAddress(addr);
+                setDeliveryCoords(coords);
+              }}
+              placeholder="Search destination street / area or click Hubs..."
+              iconType="delivery"
+            />
           </div>
 
           {/* Recipient & Package Details */}
@@ -453,6 +414,27 @@ export function CreateOrderForm() {
                 </>
               )}
             </button>
+          </div>
+
+          {/* Real-time Google Maps Route Preview */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                Live Google Maps Route
+              </span>
+              <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold">
+                Dynamic Coordinates
+              </span>
+            </div>
+            <GoogleMapTracker
+              pickupLocation={pickupCoords}
+              pickupAddress={pickupAddress}
+              deliveryLocation={deliveryCoords}
+              deliveryAddress={deliveryAddress}
+              status="pending"
+              height="260px"
+              interactive={true}
+            />
           </div>
         </div>
       </div>
