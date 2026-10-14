@@ -51,7 +51,7 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
       <button
         type="submit"
         disabled={!text.trim() || sending || disabled}
-        className="p-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white transition disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-blue-500/20"
+        className="p-2.5 rounded-xl bg-[#12B76A] hover:bg-[#039855] text-white transition disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-blue-500/20"
         aria-label="Send message"
       >
         {sending ? (

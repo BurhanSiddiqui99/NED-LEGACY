@@ -6,8 +6,10 @@ import { ordersService } from "@/services/orders.service";
 import { ridersService } from "@/services/riders.service";
 import { Order, GeoLocation } from "@/types";
 import { PAKISTAN_LOCATIONS, getOrderPriority } from "@/constants";
+import { getOrderStartWarehouseId, getWarehouse, isActiveStatus, nearestWarehouse } from "@/lib/logistics";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { LocationSelector } from "@/components/rider/location-selector";
+import { RiderCityCard } from "@/components/rider/rider-city-card";
 import { OrderCard } from "@/components/orders/order-card";
 import {
   Navigation2,
@@ -24,7 +26,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 
 export default function RiderDashboardPage() {
-  const { user, riderProfile, updateRiderAvailability } = useAuth();
+  const { user, riderProfile, riderWarehouseId, updateRiderAvailability } = useAuth();
 
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
   const [myOrders, setMyOrders] = useState<Order[]>([]);
@@ -36,10 +38,10 @@ export default function RiderDashboardPage() {
   // Subscribe to available unassigned orders
   useEffect(() => {
     const unsub = ordersService.subscribeAvailableOrders((orders) => {
-      setAvailableOrders(orders);
+      setAvailableOrders(orders.filter((o) => !user || !o.rejectedBy?.includes(user.uid)));
     });
     return () => unsub();
-  }, []);
+  }, [user]);
 
   // Subscribe to rider's assigned orders
   useEffect(() => {
@@ -50,13 +52,15 @@ export default function RiderDashboardPage() {
     return () => unsub();
   }, [user]);
 
-  const activeDeliveries = myOrders.filter(
-    (o) => o.status === "accepted" || o.status === "picked_up" || o.status === "in_transit"
-  );
+  // Orders where this rider currently holds the parcel
+  const activeDeliveries = myOrders.filter((o) => o.riderId === user?.uid && isActiveStatus(o.status));
 
   const completedDeliveries = myOrders.filter((o) => o.status === "delivered");
-  const urgentAvailable = availableOrders.filter((o) => getOrderPriority(o) === "urgent").length;
-  const highAvailable = availableOrders.filter((o) => getOrderPriority(o) === "high").length;
+  // Same rule as the feed: only jobs starting in the rider's registered city
+  const riderCity = getWarehouse(riderWarehouseId) || nearestWarehouse(currentLoc).warehouse;
+  const cityOrders = availableOrders.filter((o) => getOrderStartWarehouseId(o) === riderCity.id);
+  const urgentAvailable = cityOrders.filter((o) => getOrderPriority(o) === "urgent").length;
+  const highAvailable = cityOrders.filter((o) => getOrderPriority(o) === "high").length;
 
   const handleLocationChange = async (newLoc: GeoLocation, name?: string) => {
     setCurrentLoc(newLoc);
@@ -68,15 +72,15 @@ export default function RiderDashboardPage() {
   return (
     <div className="space-y-6">
       {/* Rider Status Banner */}
-      <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-r from-[#142B49] via-[#1a385f] to-[#0D9488] text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden">
+      <div className="p-6 md:p-8 rounded-3xl lp-brand-gradient text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden">
         <div className="space-y-1.5 z-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/10 backdrop-blur-md text-teal-300 border border-white/10">
-            <Bike className="w-3.5 h-3.5 text-teal-400" /> Delivery Fleet Partner
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/10 backdrop-blur-md text-white border border-white/20">
+            <Bike className="w-3.5 h-3.5 text-amber-300" /> Delivery Fleet Partner
           </div>
           <h1 className="text-xl md:text-2xl font-black tracking-tight">
             Welcome, {user?.fullName || "Courier Partner"}!
           </h1>
-          <p className="text-xs text-slate-200 max-w-xl">
+          <p className="text-xs text-white/80 max-w-xl">
             {riderProfile?.vehicleType} • Plate: {riderProfile?.vehicleNumber || "KHI-KAS-4821"}
           </p>
         </div>
@@ -88,7 +92,7 @@ export default function RiderDashboardPage() {
             className={`py-3 px-5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shadow-lg ${
               riderProfile?.isAvailable
                 ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20"
-                : "bg-slate-700 hover:bg-slate-600 text-white"
+                : "bg-white/15 hover:bg-white/25 border border-white/30 text-white"
             }`}
           >
             <Power className="w-4 h-4" />
@@ -101,18 +105,17 @@ export default function RiderDashboardPage() {
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
       </div>
 
+      <RiderCityCard />
+
       {/* Location Selector (GPS / city hub preset) */}
-      <LocationSelector
-        currentLocation={currentLoc}
-        onLocationChange={handleLocationChange}
-      />
+      <LocationSelector currentLocation={currentLoc} onLocationChange={handleLocationChange} city={riderCity.city} />
 
       {/* Fleet Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lp-stagger">
         <StatCard
           title="Nearby Available Orders"
-          value={availableOrders.length}
-          subtitle="Waiting for acceptance"
+          value={cityOrders.length}
+          subtitle={`Waiting in ${riderCity.city}`}
           icon={Navigation2}
           colorScheme="blue"
         />
@@ -147,7 +150,7 @@ export default function RiderDashboardPage() {
           </div>
           <div>
             <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-              Smart Nearby Pickup Feed ({availableOrders.length} available)
+              Smart Nearby Pickup Feed ({cityOrders.length} in {riderCity.city})
             </h3>
             <p className="text-xs text-slate-500">
               Ranked by Haversine distance from your position and weighted by priority.
@@ -162,7 +165,7 @@ export default function RiderDashboardPage() {
 
         <Link
           href="/rider/available-orders"
-          className="py-2.5 px-4 bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm whitespace-nowrap"
+          className="py-2.5 px-4 bg-[#12B76A] hover:bg-[#039855] text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm whitespace-nowrap"
         >
           <span>Browse Nearby Deliveries</span>
           <ArrowRight className="w-4 h-4" />
@@ -171,7 +174,7 @@ export default function RiderDashboardPage() {
 
       {/* Active Tasks In Progress */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
               My Active Deliveries ({activeDeliveries.length})

@@ -96,60 +96,75 @@ export function loadGoogleMaps(): Promise<typeof google.maps> {
     return Promise.reject(new Error("Google Maps can only be loaded in browser."));
   }
 
-  if (window.google && window.google.maps) {
-    return Promise.resolve(window.google.maps);
-  }
-
   if (googleMapsPromise) {
     return googleMapsPromise;
   }
 
-  googleMapsPromise = new Promise((resolve, reject) => {
-    // Check if already in DOM
-    const existingScript = document.getElementById("logipulse-google-maps");
-    if (existingScript) {
-      existingScript.addEventListener("load", () => {
-        if (window.google?.maps) resolve(window.google.maps);
-        else reject(new Error("Google Maps loaded without maps namespace."));
-      });
-      existingScript.addEventListener("error", (e) => reject(e));
+  googleMapsPromise = waitForBootstrap()
+    .then(async () => {
+      // With `loading=async` the script only installs a bootstrap; classes such as Map, Marker,
+      // DistanceMatrixService, DirectionsService and Autocomplete exist only after their
+      // library is imported. Importing them also populates the classic google.maps.* namespace.
+      await Promise.all(MAPS_LIBRARIES.map((lib) => window.google.maps.importLibrary(lib)));
+      return window.google.maps;
+    })
+    .catch((err) => {
+      googleMapsPromise = null;
+      console.warn("Google Maps failed to load:", err);
+      throw err;
+    });
+
+  return googleMapsPromise;
+}
+
+// "routes" provides DirectionsService and DistanceMatrixService
+const MAPS_LIBRARIES = ["core", "maps", "marker", "places", "geometry", "routes", "geocoding"];
+
+/** Injects the Maps script once and resolves when google.maps.importLibrary is available. */
+function waitForBootstrap(): Promise<void> {
+  if (typeof window.google?.maps?.importLibrary === "function") {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const callbackName = "__logipulseMapsReady";
+    (window as any)[callbackName] = () => resolve();
+
+    // Script already injected (e.g. after hot reload): wait for its callback or for importLibrary to appear
+    const existing = document.getElementById("logipulse-google-maps");
+    if (existing) {
+      const started = Date.now();
+      const poll = setInterval(() => {
+        if (typeof window.google?.maps?.importLibrary === "function") {
+          clearInterval(poll);
+          resolve();
+        } else if (Date.now() - started > 15000) {
+          clearInterval(poll);
+          reject(new Error("Timed out waiting for Google Maps."));
+        }
+      }, 100);
       return;
     }
 
     const script = document.createElement("script");
     script.id = "logipulse-google-maps";
-    script.type = "text/javascript";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places,geometry&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places,geometry&loading=async&callback=${callbackName}`;
     script.async = true;
-    script.defer = true;
-
-    script.onload = () => {
-      if (window.google?.maps) {
-        resolve(window.google.maps);
-      } else {
-        reject(new Error("Google Maps API script loaded but window.google.maps is undefined."));
-      }
+    script.onerror = () => {
+      script.remove();
+      reject(new Error("Google Maps script failed to load. Check the API key and network."));
     };
-
-    script.onerror = (err) => {
-      googleMapsPromise = null;
-      console.warn("Google Maps script failed to load:", err);
-      reject(err);
-    };
-
     document.head.appendChild(script);
   });
-
-  return googleMapsPromise;
 }
 
 /**
  * Clean modern dark map styles for sleek nighttime dashboard experience
  */
 export const DARK_MAP_STYLE: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+  { elementType: "geometry", stylers: [{ color: "#15152A" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#15152A" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#9696AE" }] },
   {
     featureType: "administrative.locality",
     elementType: "labels.text.fill",
@@ -158,22 +173,22 @@ export const DARK_MAP_STYLE: google.maps.MapTypeStyle[] = [
   {
     featureType: "poi",
     elementType: "labels.text.fill",
-    stylers: [{ color: "#64748b" }],
+    stylers: [{ color: "#6B6B85" }],
   },
   {
     featureType: "poi.park",
     elementType: "geometry",
-    stylers: [{ color: "#13233b" }],
+    stylers: [{ color: "#1B1B33" }],
   },
   {
     featureType: "road",
     elementType: "geometry",
-    stylers: [{ color: "#1e293b" }],
+    stylers: [{ color: "#23233A" }],
   },
   {
     featureType: "road",
     elementType: "geometry.stroke",
-    stylers: [{ color: "#334155" }],
+    stylers: [{ color: "#383850" }],
   },
   {
     featureType: "road.highway",
@@ -183,7 +198,7 @@ export const DARK_MAP_STYLE: google.maps.MapTypeStyle[] = [
   {
     featureType: "transit",
     elementType: "geometry",
-    stylers: [{ color: "#1e293b" }],
+    stylers: [{ color: "#23233A" }],
   },
   {
     featureType: "water",
@@ -238,12 +253,12 @@ export function createMapIcon(type: "pickup" | "delivery" | "rider"): google.map
       <svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
         <defs>
           <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#0284c7" flood-opacity="0.4"/>
+            <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#039855" flood-opacity="0.4"/>
           </filter>
         </defs>
-        <path d="M19 0C8.5 0 0 8.5 0 19C0 31.5 19 48 19 48S38 31.5 38 19C38 8.5 29.5 0 19 0Z" fill="#0284c7" filter="url(#shadow)"/>
+        <path d="M19 0C8.5 0 0 8.5 0 19C0 31.5 19 48 19 48S38 31.5 38 19C38 8.5 29.5 0 19 0Z" fill="#039855" filter="url(#shadow)"/>
         <circle cx="19" cy="18" r="9" fill="#ffffff"/>
-        <circle cx="19" cy="18" r="5" fill="#0284c7"/>
+        <circle cx="19" cy="18" r="5" fill="#039855"/>
       </svg>
     `;
     return {
@@ -259,12 +274,12 @@ export function createMapIcon(type: "pickup" | "delivery" | "rider"): google.map
       <svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
         <defs>
           <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#059669" flood-opacity="0.4"/>
+            <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#F97316" flood-opacity="0.4"/>
           </filter>
         </defs>
-        <path d="M19 0C8.5 0 0 8.5 0 19C0 31.5 19 48 19 48S38 31.5 38 19C38 8.5 29.5 0 19 0Z" fill="#059669" filter="url(#shadow)"/>
+        <path d="M19 0C8.5 0 0 8.5 0 19C0 31.5 19 48 19 48S38 31.5 38 19C38 8.5 29.5 0 19 0Z" fill="#F97316" filter="url(#shadow)"/>
         <circle cx="19" cy="18" r="9" fill="#ffffff"/>
-        <path d="M15 18L18 21L23 15" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <path d="M15 18L18 21L23 15" stroke="#F97316" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
       </svg>
     `;
     return {
@@ -279,13 +294,13 @@ export function createMapIcon(type: "pickup" | "delivery" | "rider"): google.map
     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
       <defs>
         <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#7c3aed" flood-opacity="0.5"/>
+          <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#12B76A" flood-opacity="0.5"/>
         </filter>
       </defs>
-      <circle cx="24" cy="24" r="22" fill="#7c3aed" filter="url(#glow)"/>
+      <circle cx="24" cy="24" r="22" fill="#12B76A" filter="url(#glow)"/>
       <circle cx="24" cy="24" r="18" fill="#ffffff"/>
       <!-- Bike Icon -->
-      <g transform="translate(10, 10) scale(0.6)" stroke="#7c3aed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <g transform="translate(10, 10) scale(0.6)" stroke="#12B76A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
         <circle cx="5.5" cy="17.5" r="3.5" fill="none"/>
         <circle cx="18.5" cy="17.5" r="3.5" fill="none"/>
         <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 11.5L9 9l3-2h3l2 4"/>

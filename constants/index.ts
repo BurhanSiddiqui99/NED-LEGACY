@@ -1,4 +1,5 @@
 import { LocationPreset, OrderPriority, OrderStatus, UserRole } from "@/types";
+import { RIDER_MOVING_STATUSES } from "@/lib/logistics";
 
 export const PAKISTAN_LOCATIONS: LocationPreset[] = [
   // Karachi
@@ -235,6 +236,51 @@ export const STATUS_CONFIG: Record<
     textLight: "#115E59",
     borderLight: "#5EEAD4",
   },
+  at_origin_warehouse: {
+    label: "At Origin Warehouse",
+    description: "Received at the sender's city warehouse",
+    badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800",
+    icon: "Warehouse",
+    bgLight: "#E0E7FF",
+    textLight: "#3730A3",
+    borderLight: "#A5B4FC",
+  },
+  linehaul: {
+    label: "Between Cities",
+    description: "Moving between warehouses",
+    badgeClass: "bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800",
+    icon: "Truck",
+    bgLight: "#E0F2FE",
+    textLight: "#075985",
+    borderLight: "#7DD3FC",
+  },
+  at_destination_warehouse: {
+    label: "At Destination Warehouse",
+    description: "Waiting for a last-mile rider",
+    badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800",
+    icon: "Warehouse",
+    bgLight: "#EDE9FE",
+    textLight: "#5B21B6",
+    borderLight: "#C4B5FD",
+  },
+  last_mile_accepted: {
+    label: "Last-Mile Rider Assigned",
+    description: "Rider heading to the warehouse to collect",
+    badgeClass: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800",
+    icon: "CheckCircle2",
+    bgLight: "#DBEAFE",
+    textLight: "#1E40AF",
+    borderLight: "#93C5FD",
+  },
+  out_for_delivery: {
+    label: "Out for Delivery",
+    description: "Last-mile rider riding to the recipient",
+    badgeClass: "bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800",
+    icon: "Truck",
+    bgLight: "#CCFBF1",
+    textLight: "#115E59",
+    borderLight: "#5EEAD4",
+  },
   delivered: {
     label: "Delivered",
     description: "Package successfully handed over to recipient",
@@ -323,17 +369,8 @@ export function getPriorityScore(distanceKm: number, priority: OrderPriority): n
 
 /** Rider position is only shown while a rider is assigned and the parcel is moving. */
 export function isTrackable(order: { riderId?: string | null; status: OrderStatus }): boolean {
-  return Boolean(order.riderId) && ["accepted", "picked_up", "in_transit"].includes(order.status);
+  return Boolean(order.riderId) && RIDER_MOVING_STATUSES.includes(order.status);
 }
-
-export const NEXT_ALLOWED_STATUS: Record<OrderStatus, OrderStatus[]> = {
-  pending: ["accepted", "cancelled"],
-  accepted: ["picked_up", "cancelled"],
-  picked_up: ["in_transit"],
-  in_transit: ["delivered"],
-  delivered: [],
-  cancelled: [],
-};
 
 export const DEMO_ACCOUNTS = [
   {

@@ -49,7 +49,7 @@ export function MessageBubble({ message, isCurrentUser }: MessageBubbleProps) {
       <div
         className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-2.5 text-xs shadow-md break-words ${
           isCurrentUser
-            ? "bg-gradient-to-r from-[#142B49] to-[#2563EB] text-white rounded-br-none shadow-blue-500/10"
+            ? "bg-gradient-to-r from-[#039855] to-[#12B76A] text-white rounded-br-none shadow-blue-500/10"
             : message.senderRole === "admin"
             ? "bg-purple-50 dark:bg-purple-950/50 text-slate-900 dark:text-slate-100 border border-purple-200 dark:border-purple-800 rounded-bl-none"
             : "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700/80 rounded-bl-none shadow-slate-200/50 dark:shadow-none"

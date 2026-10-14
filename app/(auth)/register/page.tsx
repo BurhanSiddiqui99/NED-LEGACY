@@ -5,12 +5,12 @@ import Link from "next/link";
 
 export default function RegisterPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#142B49] via-[#0f2138] to-[#0b1829] flex flex-col items-center justify-center p-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-[#039855] via-[#027A48] to-[#022C1B] flex flex-col items-center justify-center p-4 py-8">
       <div className="max-w-lg w-full">
         {/* Brand Header */}
         <div className="text-center mb-6">
           <Link href="/" className="inline-flex items-center gap-3 group">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#2563EB] to-[#0D9488] flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-105 transition">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#027A48] to-[#12B76A] flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-105 transition">
               <Radio className="w-6 h-6 text-white animate-pulse" />
             </div>
             <div className="text-left">

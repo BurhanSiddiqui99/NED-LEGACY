@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { GeoLocation, Order } from "@/types";
 import { ordersService } from "@/services/orders.service";
 import { calculateDistance, formatDistance } from "@/lib/distance";
+import { getRoadRoute, pathLengthKm, pointAlongPath, LatLng } from "@/lib/routing";
+import { RIDER_MOVING_STATUSES, getActiveLeg } from "@/lib/logistics";
 import { formatRelativeTime } from "@/lib/utils";
 import { toast } from "sonner";
 import { Radio, Satellite, Route, Square, AlertCircle } from "lucide-react";
@@ -21,7 +23,6 @@ const MIN_MOVE_KM = 0.015; // 15 m
 const HEARTBEAT_MS = 20000;
 const SIMULATION_TICK_MS = 3000;
 
-const ACTIVE_STATUSES = ["accepted", "picked_up", "in_transit"];
 
 /**
  * Streams the assigned rider's position onto the order document.
@@ -29,7 +30,7 @@ const ACTIVE_STATUSES = ["accepted", "picked_up", "in_transit"];
  * on their maps moves as soon as each write lands.
  */
 export function LiveLocationSharer({ order, riderUid }: LiveLocationSharerProps) {
-  const isActive = order.riderId === riderUid && ACTIVE_STATUSES.includes(order.status);
+  const isActive = order.riderId === riderUid && RIDER_MOVING_STATUSES.includes(order.status);
 
   const [mode, setMode] = useState<Mode>("off");
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -104,25 +105,34 @@ export function LiveLocationSharer({ order, riderUid }: LiveLocationSharerProps)
   useEffect(() => {
     if (mode !== "simulate" || !isActive) return;
 
-    const tick = () => {
-      const o = orderRef.current;
-      const target = o.status === "accepted" ? o.pickupLocation : o.deliveryLocation;
-      const from = lastSentRef.current?.loc || o.currentRiderLocation || o.pickupLocation;
+    // The simulated rider follows the real road route (see lib/routing) instead of a straight line
+    let route: { forStatus: string; path: LatLng[]; totalKm: number; travelledKm: number } | null = null;
+    let busy = false;
 
-      const remainingKm = calculateDistance(from.latitude, from.longitude, target.latitude, target.longitude);
-      if (remainingKm < 0.03) {
-        push(target, true);
-        return;
+    const tick = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const o = orderRef.current;
+        const leg = getActiveLeg(o);
+        const target = leg.riderHeadingToStart ? leg.from : leg.to;
+        const from = lastSentRef.current?.loc || o.currentRiderLocation || o.pickupLocation;
+
+        if (!route || route.forStatus !== o.status) {
+          const r = await getRoadRoute([from, target]);
+          route = { forStatus: o.status, path: r.path, totalKm: pathLengthKm(r.path), travelledKm: 0 };
+        }
+        if (route.travelledKm >= route.totalKm) {
+          push(target, true);
+          return;
+        }
+        // ~12% of the trip per tick, at least 150 m, so short and long trips both animate nicely
+        route.travelledKm = Math.min(route.totalKm, route.travelledKm + Math.max(0.15, route.totalKm * 0.12));
+        const p = pointAlongPath(route.path, route.travelledKm);
+        push({ latitude: p.lat, longitude: p.lng }, true);
+      } finally {
+        busy = false;
       }
-      // Move ~15% of the remaining way per tick, but at least 150 m so short trips still animate
-      const fraction = Math.min(1, Math.max(0.15, 0.15 / remainingKm));
-      push(
-        {
-          latitude: from.latitude + (target.latitude - from.latitude) * fraction,
-          longitude: from.longitude + (target.longitude - from.longitude) * fraction,
-        },
-        true
-      );
     };
 
     tick();
@@ -133,7 +143,8 @@ export function LiveLocationSharer({ order, riderUid }: LiveLocationSharerProps)
 
   if (!isActive) return null;
 
-  const target = order.status === "accepted" ? order.pickupLocation : order.deliveryLocation;
+  const leg = getActiveLeg(order);
+  const target = leg.riderHeadingToStart ? leg.from : leg.to;
   const current = order.currentRiderLocation;
   const remaining = current
     ? calculateDistance(current.latitude, current.longitude, target.latitude, target.longitude)
@@ -159,7 +170,7 @@ export function LiveLocationSharer({ order, riderUid }: LiveLocationSharerProps)
         <span className="text-[11px] text-slate-500">
           {lastSentAt ? `Last update ${formatRelativeTime(new Date(lastSentAt).toISOString())}` : "No update sent yet"}
           {remaining !== null &&
-            ` • ${formatDistance(remaining)} to ${order.status === "accepted" ? "pickup" : "drop-off"}`}
+            ` • ${formatDistance(remaining)} to ${leg.riderHeadingToStart ? leg.fromLabel.split(",")[0] : leg.toLabel.split(",")[0]}`}
         </span>
       </div>
 

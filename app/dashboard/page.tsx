@@ -27,7 +27,7 @@ export default function DashboardRedirectPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
-      <Loader2 className="w-8 h-8 animate-spin text-[#2563EB]" />
+      <Loader2 className="w-8 h-8 animate-spin text-[#12B76A]" />
       <span className="text-xs text-slate-400 mt-3 font-medium">
         Redirecting to your authorized dashboard...
       </span>

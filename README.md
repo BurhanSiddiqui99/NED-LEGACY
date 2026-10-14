@@ -54,6 +54,64 @@
 | 6 | Rider | `updateOrderStatus()` enforces `accepted → picked_up → in_transit → delivered` inside a transaction |
 | 7 | Customer + Admin | Both dashboards update from their snapshot listeners and get a notification |
 
+### Within-city vs. intercity delivery
+
+Every city has a warehouse (`WAREHOUSES` in `lib/logistics.ts`). Each address belongs to its nearest warehouse. If pickup and drop-off map to the same warehouse the order is **intracity**; otherwise it is **intercity**.
+
+Every verification works the same way. The **rider** taps "Email me the code" and receives a 6-digit OTP on their own email. The verifying party (**customer** or **warehouse admin**) asks the rider for the code and enters it in their own dashboard. A matching code proves the rider is physically there. **Entering the last required code completes the step immediately.** For example, the customer typing the pickup code marks the parcel Picked Up, and typing the delivery code marks it Delivered. The rider does not press anything else.
+
+**Flow 1: within the city**
+
+| Step | Who acts | Who verifies (enters the rider's code) |
+|---|---|---|
+| Request → appears in the nearby feed of that city's riders | Customer | – |
+| Accept **or reject** | Rider | Rejections (with reason) are logged for the admin. The order stays open for other riders in the city. |
+| Picked up | Rider | **Customer** (order page) |
+| In transit → Delivered | Rider | **Customer** |
+
+**Flow 2: between cities**
+
+| Step | Who acts | Who verifies |
+|---|---|---|
+| Request → accept / reject | Rider in the **pickup city** | – |
+| Picked up | First-mile rider | **Customer** |
+| Dropped at origin warehouse | First-mile rider | **Customer** *and* **admin** (admin enters it on `/admin/warehouses` or the order page) |
+| Dispatched → arrived at destination warehouse | Admin | Admin action on `/admin/warehouses` |
+| Claimed from destination warehouse | Rider in the **destination city** | Accept / reject |
+| Collected from warehouse | Last-mile rider | **Admin** |
+| Delivered | Last-mile rider | **Customer** |
+
+**How OTP works:** `/api/otp/send` generates the code and emails it to the rider with Nodemailer. The server returns an HMAC-signed token, and only that token is saved on the order, never the code. `/api/otp/verify` checks the code the customer or admin typed against the token. Codes expire after 15 minutes, resends are throttled to one per 30 s, and each code allows 5 attempts. Without SMTP settings in development, the API returns the code to the rider UI as a demo code.
+
+> The OTP check runs on the server, but the final status write is made by the client and can only be enforced by Firestore rules, which cannot see OTPs. A Cloud Function (or `firebase-admin` in the verify route) that writes the status itself would close this gap.
+
+### Pricing
+
+Flat zone pricing (`ZONE_PRICES` in `lib/logistics.ts`). The zone depends on which city warehouse serves the pickup and the drop-off, and on each warehouse's province:
+
+| Zone | Price |
+|---|---|
+| Pickup and drop-off in the same city | **PKR 250** |
+| Different city, same province (e.g. Lahore → Multan) | **PKR 400** |
+| Different province (e.g. Karachi → Lahore) | **PKR 600** |
+
+HIGH (+100) and URGENT (+250) priority surcharges from the Day 2 feature are added on top. Islamabad is treated as its own territory (Islamabad Capital Territory), so Islamabad → Rawalpindi is priced as a different province.
+
+### Riders see only their own city
+
+Customers see the detected sender and receiver city on the order form and can correct either one. Riders choose their city when they register (admins can change it on `/admin/riders`). Riders created before this feature fall back to the city nearest their GPS location. The nearby feed and the dashboard counts only show jobs that **start** in that city: a new request picked up there, or an intercity parcel waiting at that city's warehouse for its last mile. New-job notifications go to a per-city inbox (`riders-<warehouseId>`), so riders in other cities are not alerted.
+
+### Warehouses (admin)
+
+`/admin/warehouses` shows every hub with live counts:
+- **In stock:** at the hub now.
+- **Incoming:** first-mile riders on the way, plus line-haul arriving.
+- **Outgoing:** line-haul leaving.
+- **To deliver:** waiting for or with a last-mile rider.
+- **Delivered**
+
+Each hub also shows its weight in stock and how much of its capacity is used. Admins dispatch and receive line-haul parcels from the same page.
+
 ---
 
 ## Smart Nearby Pickup
@@ -118,7 +176,14 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
 NEXT_PUBLIC_FIREBASE_APP_ID=...
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...   # enable Maps JavaScript, Places, Geocoding, Distance Matrix
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...   # enable Maps JavaScript, Places, Geocoding, Distance Matrix, Directions
+
+# Email OTP (server only)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=you@gmail.com
+SMTP_PASS=<Gmail App Password>
+OTP_SECRET=<random 32 chars>
 ```
 
 **Firestore security rules:** paste `firestore.rules` into *Firebase Console → Firestore → Rules → Publish*. The chat subcollection and live-location updates require these rules.

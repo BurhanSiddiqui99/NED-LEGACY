@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { GeoLocation, OrderStatus } from "@/types";
 import {
   loadGoogleMaps,
@@ -10,17 +10,11 @@ import {
   PAKISTAN_DEFAULT_CENTER,
   escapeHtml,
 } from "@/lib/google-maps";
+import { getRoadRoute, locateOnPath, pathLengthKm, LatLng, RouteResult } from "@/lib/routing";
 import { formatRelativeTime } from "@/lib/utils";
-import {
-  Navigation,
-  MapPin,
-  Bike,
-  Maximize2,
-  RefreshCw,
-  AlertCircle,
-  Layers,
-  Crosshair,
-} from "lucide-react";
+import { RIDER_MOVING_STATUSES } from "@/lib/logistics";
+import { TripTimeline, TimelineStop } from "./trip-timeline";
+import { Navigation, MapPin, Bike, RefreshCw, AlertCircle, Layers, Crosshair } from "lucide-react";
 
 interface GoogleMapTrackerProps {
   pickupLocation: GeoLocation;
@@ -33,6 +27,39 @@ interface GoogleMapTrackerProps {
   status: OrderStatus;
   height?: string;
   interactive?: boolean;
+  // Google-Maps-style ETA + stops + turn-by-turn panel under the map
+  showTimeline?: boolean;
+  // True while the rider is still riding to the start of the leg (pickup point or warehouse)
+  riderHeadingToStart?: boolean;
+}
+
+// Re-route only when the rider strays this far from the current road route
+const OFF_ROUTE_KM = 0.2;
+
+const ROUTE_BLUE = "#12B76A";
+const ROUTE_BORDER = "#027A48";
+const ROUTE_DONE = "#10B981";
+
+function toLatLng(g: GeoLocation): LatLng {
+  return { lat: g.latitude, lng: g.longitude };
+}
+
+/** Glides a marker to its new position instead of jumping. */
+function animateMarker(marker: google.maps.Marker, to: LatLng, durationMs = 900) {
+  const fromPos = marker.getPosition();
+  if (!fromPos) {
+    marker.setPosition(to);
+    return;
+  }
+  const from = { lat: fromPos.lat(), lng: fromPos.lng() };
+  const start = performance.now();
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / durationMs);
+    const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    marker.setPosition({ lat: from.lat + (to.lat - from.lat) * e, lng: from.lng + (to.lng - from.lng) * e });
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 export function GoogleMapTracker({
@@ -46,380 +73,428 @@ export function GoogleMapTracker({
   status,
   height = "380px",
   interactive = true,
+  showTimeline = false,
+  riderHeadingToStart,
 }: GoogleMapTrackerProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<{
-    pickup?: google.maps.Marker;
-    delivery?: google.maps.Marker;
-    rider?: google.maps.Marker;
-  }>({});
-  const polylineRef = useRef<google.maps.Polyline | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const markersRef = useRef<{ pickup?: google.maps.Marker; delivery?: google.maps.Marker; rider?: google.maps.Marker }>({});
+  const linesRef = useRef<{ border?: google.maps.Polyline; main?: google.maps.Polyline; trail?: google.maps.Polyline }>({});
+  const fittedKeyRef = useRef<string | null>(null);
 
-  const [loading, setLoading] = useState(true);
+  const [mapReady, setMapReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
   const [followRider, setFollowRider] = useState(false);
-  // Re-render every 15 s so "updated Xs ago" stays fresh between location writes
+  const [route, setRoute] = useState<{ key: string; result: RouteResult } | null>(null);
+  const [routeLoading, setRouteLoading] = useState(true);
+  const [trail, setTrail] = useState<LatLng[]>([]);
+  // Re-render every 15 s so relative times and ETAs stay fresh between updates
   const [, setClock] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setClock((c) => c + 1), 15000);
     return () => clearInterval(id);
   }, []);
 
-  // Detect dark mode from document class
-  const isDarkMode =
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("dark");
+  const isDarkMode = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
 
+  const finished = status === "delivered" || status === "cancelled";
+  const riderActive = Boolean(riderLocation) && RIDER_MOVING_STATUSES.includes(status);
+
+  // Which stops the route goes through for the current stage of the delivery
+  const headingToStart = riderHeadingToStart ?? status === "accepted";
+  const routeMode = !riderActive ? "trip" : headingToStart ? "to-pickup" : "to-dropoff";
+  const modeKey = `${routeMode}|${pickupLocation.latitude},${pickupLocation.longitude}|${deliveryLocation.latitude},${deliveryLocation.longitude}`;
+
+  /* ---------------- 1. Map + static markers ---------------- */
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
 
-    async function initMap() {
+    async function init() {
       try {
-        setLoading(true);
-        const googleMaps = await loadGoogleMaps();
-        if (!isMounted || !mapContainerRef.current) return;
+        const gm = await loadGoogleMaps();
+        if (!mounted || !mapContainerRef.current) return;
 
-        const centerLat = pickupLocation?.latitude || PAKISTAN_DEFAULT_CENTER.lat;
-        const centerLng = pickupLocation?.longitude || PAKISTAN_DEFAULT_CENTER.lng;
-
-        // Initialize Map
-        const map = new googleMaps.Map(mapContainerRef.current, {
-          center: { lat: centerLat, lng: centerLng },
+        const map = new gm.Map(mapContainerRef.current, {
+          center: {
+            lat: pickupLocation?.latitude || PAKISTAN_DEFAULT_CENTER.lat,
+            lng: pickupLocation?.longitude || PAKISTAN_DEFAULT_CENTER.lng,
+          },
           zoom: 13,
           styles: isDarkMode ? DARK_MAP_STYLE : LIGHT_MAP_STYLE,
           disableDefaultUI: !interactive,
           zoomControl: interactive,
+          gestureHandling: "cooperative",
           streetViewControl: false,
           mapTypeControl: false,
           fullscreenControl: false,
         });
+        mapRef.current = map;
 
-        mapInstanceRef.current = map;
-
-        // Add Pickup Marker
-        const pickupMarker = new googleMaps.Marker({
-          position: {
-            lat: pickupLocation.latitude,
-            lng: pickupLocation.longitude,
-          },
-          map,
-          title: `Pickup: ${pickupAddress || "Origin Point"}`,
-          icon: createMapIcon("pickup"),
-          animation: googleMaps.Animation.DROP,
-        });
-
-        const pickupInfoWindow = new googleMaps.InfoWindow({
-          content: `
-            <div style="color: #0f172a; font-family: sans-serif; padding: 4px; font-size: 12px;">
-              <strong style="color: #0284c7;">📍 Pickup Location</strong>
-              <p style="margin: 4px 0 0; color: #475569;">${escapeHtml(pickupAddress || "Pickup point")}</p>
-            </div>
-          `,
-        });
-
-        pickupMarker.addListener("click", () => {
-          pickupInfoWindow.open(map, pickupMarker);
-        });
-
-        markersRef.current.pickup = pickupMarker;
-
-        // Add Delivery Destination Marker
-        const deliveryMarker = new googleMaps.Marker({
-          position: {
-            lat: deliveryLocation.latitude,
-            lng: deliveryLocation.longitude,
-          },
-          map,
-          title: `Destination: ${deliveryAddress || "Delivery Target"}`,
-          icon: createMapIcon("delivery"),
-          animation: googleMaps.Animation.DROP,
-        });
-
-        const deliveryInfoWindow = new googleMaps.InfoWindow({
-          content: `
-            <div style="color: #0f172a; font-family: sans-serif; padding: 4px; font-size: 12px;">
-              <strong style="color: #059669;">🏁 Delivery Destination</strong>
-              <p style="margin: 4px 0 0; color: #475569;">${escapeHtml(deliveryAddress || "Destination")}</p>
-            </div>
-          `,
-        });
-
-        deliveryMarker.addListener("click", () => {
-          deliveryInfoWindow.open(map, deliveryMarker);
-        });
-
-        markersRef.current.delivery = deliveryMarker;
-
-        // Fit map bounds to show both pins
-        const bounds = new googleMaps.LatLngBounds();
-        bounds.extend({ lat: pickupLocation.latitude, lng: pickupLocation.longitude });
-        bounds.extend({ lat: deliveryLocation.latitude, lng: deliveryLocation.longitude });
-
-        // Add Rider Marker if active
-        if (riderLocation) {
-          const riderMarker = new googleMaps.Marker({
-            position: { lat: riderLocation.latitude, lng: riderLocation.longitude },
+        const addStop = (pos: GeoLocation, kind: "pickup" | "delivery", title: string, color: string, text: string) => {
+          const marker = new gm.Marker({
+            position: toLatLng(pos),
             map,
-            title: `Courier: ${riderName || "Active Rider"}`,
-            icon: createMapIcon("rider"),
-            zIndex: 999,
+            title,
+            icon: createMapIcon(kind),
+            animation: gm.Animation.DROP,
+            zIndex: 50,
           });
-
-          const riderInfoWindow = new googleMaps.InfoWindow({
-            content: `
-              <div style="color: #0f172a; font-family: sans-serif; padding: 4px; font-size: 12px;">
-                <strong style="color: #7c3aed;">🛵 Courier On The Move</strong>
-                <p style="margin: 4px 0 0; color: #475569;"><strong>${escapeHtml(riderName || "Rider")}</strong> is on the way.</p>
-              </div>
-            `,
+          const info = new gm.InfoWindow({
+            content: `<div style="color:#0f172a;font-family:sans-serif;padding:4px;font-size:12px;"><strong style="color:${color};">${title}</strong><p style="margin:4px 0 0;color:#475569;">${escapeHtml(text)}</p></div>`,
           });
+          marker.addListener("click", () => info.open(map, marker));
+          return marker;
+        };
+        markersRef.current.pickup = addStop(pickupLocation, "pickup", "📍 Pickup", "#039855", pickupAddress || "Pickup point");
+        markersRef.current.delivery = addStop(deliveryLocation, "delivery", "🏁 Drop-off", "#F97316", deliveryAddress || "Destination");
 
-          riderMarker.addListener("click", () => {
-            riderInfoWindow.open(map, riderMarker);
-          });
-
-          markersRef.current.rider = riderMarker;
-          bounds.extend({ lat: riderLocation.latitude, lng: riderLocation.longitude });
-        }
-
-        map.fitBounds(bounds, { top: 60, bottom: 60, left: 60, right: 60 });
-
-        // Draw Route Line
-        const pathCoords = [
-          { lat: pickupLocation.latitude, lng: pickupLocation.longitude },
-          ...(riderLocation
-            ? [{ lat: riderLocation.latitude, lng: riderLocation.longitude }]
-            : []),
-          { lat: deliveryLocation.latitude, lng: deliveryLocation.longitude },
-        ];
-
-        const polyline = new googleMaps.Polyline({
-          path: pathCoords,
-          geodesic: true,
-          strokeColor: "#2563EB",
-          strokeOpacity: 0.85,
-          strokeWeight: 4,
+        // Google-style route: a darker border line under the main blue line, plus a dashed trail
+        linesRef.current.border = new gm.Polyline({ map, strokeColor: ROUTE_BORDER, strokeWeight: 9, strokeOpacity: 0.9, zIndex: 1 });
+        linesRef.current.main = new gm.Polyline({ map, strokeColor: ROUTE_BLUE, strokeWeight: 5.5, strokeOpacity: 1, zIndex: 2 });
+        linesRef.current.trail = new gm.Polyline({
           map,
+          strokeOpacity: 0,
+          zIndex: 3,
+          icons: [
+            {
+              icon: { path: "M 0,-1 0,1", strokeOpacity: 0.9, strokeColor: "#94A3B8", scale: 3 },
+              offset: "0",
+              repeat: "12px",
+            },
+          ],
         });
 
-        polylineRef.current = polyline;
-        setLoading(false);
+        const bounds = new gm.LatLngBounds();
+        bounds.extend(toLatLng(pickupLocation));
+        bounds.extend(toLatLng(deliveryLocation));
+        map.fitBounds(bounds, 60);
+
+        setMapReady(true);
       } catch (err: any) {
-        if (!isMounted) return;
+        if (!mounted) return;
         console.warn("Google Maps init notice:", err);
         setLoadError(err?.message || "Failed to load Google Maps");
-        setLoading(false);
       }
     }
 
-    initMap();
+    init();
 
     return () => {
-      isMounted = false;
-      // Cleanup markers & polyline
-      if (markersRef.current.pickup) markersRef.current.pickup.setMap(null);
-      if (markersRef.current.delivery) markersRef.current.delivery.setMap(null);
-      if (markersRef.current.rider) markersRef.current.rider.setMap(null);
-      if (polylineRef.current) polylineRef.current.setMap(null);
+      mounted = false;
+      setMapReady(false);
+      Object.values(markersRef.current).forEach((m) => m?.setMap(null));
+      Object.values(linesRef.current).forEach((l) => l?.setMap(null));
+      markersRef.current = {};
+      linesRef.current = {};
+      fittedKeyRef.current = null;
     };
-  }, [
-    pickupLocation.latitude,
-    pickupLocation.longitude,
-    deliveryLocation.latitude,
-    deliveryLocation.longitude,
-    isDarkMode,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickupLocation.latitude, pickupLocation.longitude, deliveryLocation.latitude, deliveryLocation.longitude, isDarkMode]);
 
-  // Move the rider pin whenever a new live location arrives from Firestore
+  /* ---------------- 2. Road route (independent of the map, so the timeline works even if Maps fails) ---------------- */
   useEffect(() => {
-    if (loading || !mapInstanceRef.current || !window.google?.maps) return;
+    // Keep the current route while the rider stays on it; only re-route on a stage change or detour
+    if (route && route.key === modeKey) {
+      if (!riderActive || !riderLocation) return;
+      const { offRouteKm } = locateOnPath(route.result.path, riderLocation);
+      if (offRouteKm < OFF_ROUTE_KM) return;
+    }
 
-    const pickup = { lat: pickupLocation.latitude, lng: pickupLocation.longitude };
-    const dropoff = { lat: deliveryLocation.latitude, lng: deliveryLocation.longitude };
+    const stops: GeoLocation[] =
+      routeMode === "trip"
+        ? [pickupLocation, deliveryLocation]
+        : routeMode === "to-pickup"
+        ? [riderLocation!, pickupLocation, deliveryLocation]
+        : [riderLocation!, deliveryLocation];
 
-    if (!riderLocation) {
+    let cancelled = false;
+    setRouteLoading(true);
+    getRoadRoute(stops).then((result) => {
+      if (cancelled) return;
+      setRoute({ key: modeKey, result });
+      setRouteLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modeKey, riderLocation?.latitude, riderLocation?.longitude]);
+
+  // Breadcrumb trail of where the rider has actually been
+  useEffect(() => {
+    if (!riderActive || !riderLocation) return;
+    setTrail((t) => {
+      const last = t[t.length - 1];
+      if (last && last.lat === riderLocation.latitude && last.lng === riderLocation.longitude) return t;
+      return [...t, toLatLng(riderLocation)].slice(-400);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [riderActive, riderLocation?.latitude, riderLocation?.longitude]);
+
+  /* ---------------- 3. Remaining route trimmed at the rider + per-stop ETAs ---------------- */
+  const progress = useMemo(() => {
+    if (!route) return null;
+    const { path, legs } = route.result;
+    let startIdx = 0;
+    let remainingPath = path;
+    if (routeMode !== "trip" && riderLocation) {
+      startIdx = locateOnPath(path, riderLocation).index;
+      remainingPath = [toLatLng(riderLocation), ...path.slice(startIdx + 1)];
+    }
+
+    let legStart = 0;
+    const remainingLegs = legs.map((leg) => {
+      const from = Math.max(legStart, startIdx);
+      const fullKm = pathLengthKm(path, legStart, leg.endIndex) || leg.distanceKm;
+      const remKm = from >= leg.endIndex ? 0 : pathLengthKm(path, from, leg.endIndex);
+      const ratio = fullKm > 0 ? Math.min(1, remKm / fullKm) : 0;
+      legStart = leg.endIndex;
+      return { km: leg.distanceKm * ratio, min: leg.durationMin * ratio, steps: leg.steps };
+    });
+    return { remainingPath, remainingLegs };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route, routeMode, riderLocation?.latitude, riderLocation?.longitude]);
+
+  /* ---------------- 4. Draw route, trail and rider marker ---------------- */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map || !window.google?.maps) return;
+    const { border, main, trail: trailLine } = linesRef.current;
+
+    const path = progress?.remainingPath || [toLatLng(pickupLocation), toLatLng(deliveryLocation)];
+    main?.setOptions({
+      path,
+      strokeColor: status === "delivered" ? ROUTE_DONE : ROUTE_BLUE,
+      strokeOpacity: status === "cancelled" ? 0.35 : 1,
+    });
+    border?.setOptions({
+      path,
+      strokeColor: status === "delivered" ? "#047857" : ROUTE_BORDER,
+      strokeOpacity: status === "cancelled" ? 0.2 : 0.9,
+    });
+    trailLine?.setPath(riderActive ? trail : []);
+
+    // Rider marker
+    if (riderActive && riderLocation) {
+      const pos = toLatLng(riderLocation);
       if (markersRef.current.rider) {
-        markersRef.current.rider.setMap(null);
-        markersRef.current.rider = undefined;
+        animateMarker(markersRef.current.rider, pos);
+      } else {
+        const marker = new window.google.maps.Marker({
+          position: pos,
+          map,
+          title: `Courier: ${riderName || "Active Rider"}`,
+          icon: createMapIcon("rider"),
+          zIndex: 999,
+        });
+        const info = new window.google.maps.InfoWindow({
+          content: `<div style="color:#0f172a;font-family:sans-serif;padding:4px;font-size:12px;"><strong style="color:#12B76A;">🛵 ${escapeHtml(riderName || "Rider")}</strong><p style="margin:4px 0 0;color:#475569;">On the way</p></div>`,
+        });
+        marker.addListener("click", () => info.open(map, marker));
+        markersRef.current.rider = marker;
       }
-      polylineRef.current?.setPath([pickup, dropoff]);
-      return;
+      if (followRider) map.panTo(pos);
+    } else if (markersRef.current.rider) {
+      markersRef.current.rider.setMap(null);
+      markersRef.current.rider = undefined;
     }
 
-    const position = { lat: riderLocation.latitude, lng: riderLocation.longitude };
-    if (markersRef.current.rider) {
-      markersRef.current.rider.setPosition(position);
-    } else {
-      markersRef.current.rider = new window.google.maps.Marker({
-        position,
-        map: mapInstanceRef.current,
-        title: `Courier: ${riderName || "Active Rider"}`,
-        icon: createMapIcon("rider"),
-        zIndex: 999,
-      });
-    }
-
-    // Before pickup the route runs rider -> pickup -> drop-off, afterwards pickup -> rider -> drop-off
-    polylineRef.current?.setPath(
-      status === "accepted" ? [position, pickup, dropoff] : [pickup, position, dropoff]
-    );
-
-    if (followRider) {
-      mapInstanceRef.current.panTo(position);
+    // Frame the whole route once per stage
+    if (route && fittedKeyRef.current !== route.key && !followRider) {
+      const bounds = new window.google.maps.LatLngBounds();
+      route.result.path.forEach((p) => bounds.extend(p));
+      bounds.extend(toLatLng(pickupLocation));
+      bounds.extend(toLatLng(deliveryLocation));
+      map.fitBounds(bounds, 60);
+      fittedKeyRef.current = route.key;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [riderLocation?.latitude, riderLocation?.longitude, riderName, status, loading, followRider]);
+  }, [mapReady, progress, trail, riderActive, riderLocation?.latitude, riderLocation?.longitude, status, followRider, riderName]);
 
-  const handleCenterRider = () => {
-    if (!mapInstanceRef.current) return;
-    if (riderLocation) {
-      mapInstanceRef.current.panTo({
-        lat: riderLocation.latitude,
-        lng: riderLocation.longitude,
+  /* ---------------- Timeline data ---------------- */
+  const timeline = useMemo(() => {
+    const legs = progress?.remainingLegs || [];
+    const stops: TimelineStop[] = [];
+    let totalKm: number | null = null;
+    let totalMin: number | null = null;
+    let steps = legs[0]?.steps || [];
+
+    if (routeMode === "trip") {
+      const trip = legs[0];
+      if (trip) {
+        totalKm = trip.km;
+        totalMin = trip.min;
+      }
+      const pickupDone = status !== "pending" && status !== "cancelled";
+      stops.push({ key: "pickup", label: "Pickup", address: pickupAddress, state: pickupDone ? "done" : "current", km: 0, min: 0 });
+      stops.push({
+        key: "dropoff",
+        label: "Drop-off",
+        address: deliveryAddress,
+        state: status === "delivered" ? "done" : "upcoming",
+        km: trip?.km,
+        min: trip?.min,
       });
-      mapInstanceRef.current.setZoom(15);
     } else {
-      mapInstanceRef.current.panTo({
-        lat: pickupLocation.latitude,
-        lng: pickupLocation.longitude,
+      stops.push({
+        key: "rider",
+        label: riderName || "Rider",
+        address: riderUpdatedAt ? `Live · updated ${formatRelativeTime(riderUpdatedAt)}` : "Live position",
+        state: "current",
       });
-      mapInstanceRef.current.setZoom(14);
+      if (routeMode === "to-pickup") {
+        const [toPickup, toDrop] = legs;
+        stops.push({ key: "pickup", label: "Collect", address: pickupAddress, state: "upcoming", km: toPickup?.km, min: toPickup?.min });
+        stops.push({
+          key: "dropoff",
+          label: "Drop-off",
+          address: deliveryAddress,
+          state: "upcoming",
+          km: (toPickup?.km || 0) + (toDrop?.km || 0),
+          min: (toPickup?.min || 0) + (toDrop?.min || 0),
+        });
+        if (toPickup) {
+          totalKm = toPickup.km;
+          totalMin = toPickup.min;
+        }
+      } else {
+        const [toDrop] = legs;
+        stops.unshift({ key: "pickup", label: "Pickup", address: pickupAddress, state: "done" });
+        stops.push({ key: "dropoff", label: "Drop-off", address: deliveryAddress, state: "upcoming", km: toDrop?.km, min: toDrop?.min });
+        if (toDrop) {
+          totalKm = toDrop.km;
+          totalMin = toDrop.min;
+        }
+      }
     }
+    if (finished) steps = [];
+    return { stops, totalKm, totalMin, steps };
+  }, [progress, routeMode, status, pickupAddress, deliveryAddress, riderName, riderUpdatedAt, finished]);
+
+  const handleCenter = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    const target = riderActive && riderLocation ? riderLocation : pickupLocation;
+    map.panTo(toLatLng(target));
+    map.setZoom(15);
   };
 
   const handleToggleMapType = () => {
-    if (!mapInstanceRef.current) return;
-    const nextType = mapType === "roadmap" ? "satellite" : "roadmap";
-    mapInstanceRef.current.setMapTypeId(nextType);
-    setMapType(nextType);
+    if (!mapRef.current) return;
+    const next = mapType === "roadmap" ? "satellite" : "roadmap";
+    mapRef.current.setMapTypeId(next);
+    setMapType(next);
   };
 
   return (
-    <div className="relative rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-lg bg-slate-950">
-      {/* Map Container */}
-      <div
-        ref={mapContainerRef}
-        style={{ width: "100%", height }}
-        className="w-full h-full relative"
-      />
+    <div className="space-y-4">
+      <div className="relative rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-lg bg-slate-950">
+        <div ref={mapContainerRef} style={{ width: "100%", height }} className="w-full h-full relative" />
 
-      {/* Loading Overlay */}
-      {loading && (
-        <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20">
-          <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mb-2" />
-          <span className="text-xs font-semibold tracking-wide">
-            Initializing Live Google Maps...
-          </span>
-          <span className="text-[10px] text-slate-400 mt-0.5">
-            Connecting real-time courier telemetry
-          </span>
-        </div>
-      )}
-
-      {/* Error Fallback Banner if API key domain restricted */}
-      {loadError && (
-        <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center text-white z-20">
-          <AlertCircle className="w-10 h-10 text-amber-400 mb-2" />
-          <h4 className="text-sm font-bold text-white">Google Maps could not load</h4>
-          <p className="text-xs text-slate-300 max-w-sm mt-1">
-            Check the Maps API key / allowed domains. Route coordinates: ({pickupLocation.latitude.toFixed(3)},{" "}
-            {pickupLocation.longitude.toFixed(3)} → {deliveryLocation.latitude.toFixed(3)},{" "}
-            {deliveryLocation.longitude.toFixed(3)})
-          </p>
-          <div className="mt-4 flex items-center gap-3 text-xs bg-slate-800 px-3 py-2 rounded-xl">
-            <span className="flex items-center gap-1 text-blue-400">
-              <MapPin className="w-3.5 h-3.5" /> {pickupAddress || "Pickup"}
-            </span>
-            <span>→</span>
-            <span className="flex items-center gap-1 text-teal-400">
-              <MapPin className="w-3.5 h-3.5" /> {deliveryAddress || "Destination"}
-            </span>
+        {!mapReady && !loadError && (
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20">
+            <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mb-2" />
+            <span className="text-xs font-semibold tracking-wide">Loading live map…</span>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Real-time Map Badges & Overlay Controls */}
-      {!loading && !loadError && (
-        <>
-          {/* Top Left Live Status Pill */}
-          <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-            <div className="bg-slate-900/90 dark:bg-slate-900/95 backdrop-blur-md text-white px-3 py-1.5 rounded-xl border border-white/10 shadow-lg text-[11px] font-semibold flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span>Realtime Delivery Radar</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-500/20 text-blue-300 uppercase tracking-wider font-bold">
-                {status.replace("_", " ")}
+        {loadError && (
+          <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center text-white z-20">
+            <AlertCircle className="w-10 h-10 text-amber-400 mb-2" />
+            <h4 className="text-sm font-bold text-white">Google Maps could not load</h4>
+            <p className="text-xs text-slate-300 max-w-sm mt-1">
+              Check the Maps API key and its allowed domains.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-xs bg-slate-800 px-3 py-2 rounded-xl">
+              <span className="flex items-center gap-1 text-blue-400">
+                <MapPin className="w-3.5 h-3.5" /> {pickupAddress || "Pickup"}
+              </span>
+              <span>→</span>
+              <span className="flex items-center gap-1 text-teal-400">
+                <MapPin className="w-3.5 h-3.5" /> {deliveryAddress || "Destination"}
               </span>
             </div>
           </div>
+        )}
 
-          {/* Top Right Map Control Buttons */}
-          <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
-            {riderLocation && (
-              <button
-                onClick={() => setFollowRider(!followRider)}
-                className={`p-2 rounded-xl border border-white/10 shadow-lg text-xs font-medium transition flex items-center gap-1 ${
-                  followRider ? "bg-purple-600 text-white" : "bg-slate-900/90 hover:bg-slate-800 text-white"
-                }`}
-                title="Keep the map centred on the rider"
-                aria-pressed={followRider}
-              >
-                <Crosshair className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Follow</span>
-              </button>
-            )}
-            <button
-              onClick={handleCenterRider}
-              className="p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-white/10 shadow-lg text-xs font-medium transition flex items-center gap-1"
-              title="Focus on Rider / Pickup"
-            >
-              <Navigation className="w-3.5 h-3.5 text-teal-400" />
-              <span className="hidden sm:inline">Center</span>
-            </button>
-
-            <button
-              onClick={handleToggleMapType}
-              className="p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-white/10 shadow-lg text-xs font-medium transition flex items-center gap-1"
-              title="Toggle Roadmap / Satellite View"
-            >
-              <Layers className="w-3.5 h-3.5 text-blue-400" />
-              <span className="hidden sm:inline capitalize">{mapType}</span>
-            </button>
-          </div>
-
-          {/* Bottom Telemetry Bar */}
-          <div className="absolute bottom-3 left-3 right-3 z-10 flex items-center justify-between gap-2 pointer-events-none">
-            <div className="bg-slate-900/90 dark:bg-slate-900/95 backdrop-blur-md text-white px-3.5 py-2 rounded-2xl border border-white/10 shadow-lg text-xs flex items-center gap-3 pointer-events-auto">
-              <div className="flex items-center gap-1.5 text-blue-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-blue-400" />
-                <span className="truncate max-w-[120px] sm:max-w-[180px]">
-                  {pickupAddress || "Pickup Point"}
-                </span>
-              </div>
-              <span className="text-slate-500">→</span>
-              <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="truncate max-w-[120px] sm:max-w-[180px]">
-                  {deliveryAddress || "Destination"}
-                </span>
+        {mapReady && !loadError && (
+          <>
+            {/* ETA pill, like the Google Maps route bubble */}
+            <div className="absolute top-3 left-3 z-10 max-w-[55%]">
+              <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/10 shadow-lg text-[11px] font-semibold flex items-center gap-2 text-slate-800 dark:text-white">
+                <span className={`w-2 h-2 shrink-0 rounded-full ${riderActive ? "bg-emerald-500 animate-pulse" : "bg-blue-500"}`} />
+                {timeline.totalMin !== null && !finished ? (
+                  <span className="truncate">
+                    <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                      {Math.max(1, Math.round(timeline.totalMin))} min
+                    </span>
+                    <span className="text-slate-500">
+                      {" "}
+                      · {routeMode === "to-pickup" ? "to pickup" : routeMode === "to-dropoff" ? "to drop-off" : "trip"}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="uppercase tracking-wider truncate">{status.replace("_", " ")}</span>
+                )}
               </div>
             </div>
 
-            {riderLocation && (
-              <div className="bg-purple-950/90 backdrop-blur-md text-purple-200 border border-purple-800 px-3 py-2 rounded-2xl text-xs font-semibold flex items-center gap-2 pointer-events-auto shadow-lg shrink-0">
-                <Bike className="w-3.5 h-3.5 text-purple-400 animate-bounce" />
-                <span className="hidden sm:inline">Rider Live:</span>
-                <span>{riderName || "Courier"}</span>
+            <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+              {riderActive && (
+                <button
+                  onClick={() => setFollowRider(!followRider)}
+                  className={`p-2 rounded-xl border border-white/10 shadow-lg text-xs font-medium transition flex items-center gap-1 ${
+                    followRider ? "bg-purple-600 text-white" : "bg-slate-900/90 hover:bg-slate-800 text-white"
+                  }`}
+                  title="Keep the map centred on the rider"
+                  aria-pressed={followRider}
+                >
+                  <Crosshair className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Follow</span>
+                </button>
+              )}
+              <button
+                onClick={handleCenter}
+                className="p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-white/10 shadow-lg text-xs font-medium transition flex items-center gap-1"
+                title="Focus on rider / pickup"
+              >
+                <Navigation className="w-3.5 h-3.5 text-teal-400" />
+                <span className="hidden sm:inline">Center</span>
+              </button>
+              <button
+                onClick={handleToggleMapType}
+                className="p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-white/10 shadow-lg text-xs font-medium transition flex items-center gap-1"
+                title="Toggle roadmap / satellite"
+              >
+                <Layers className="w-3.5 h-3.5 text-blue-400" />
+                <span className="hidden sm:inline capitalize">{mapType}</span>
+              </button>
+            </div>
+
+            {riderActive && (
+              <div className="absolute bottom-3 left-3 z-10 bg-purple-950/90 backdrop-blur-md text-purple-100 border border-purple-800 px-3 py-2 rounded-2xl text-xs font-semibold flex items-center gap-2 shadow-lg max-w-[calc(100%-1.5rem)]">
+                <Bike className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+                <span className="truncate">{riderName || "Courier"}</span>
                 {riderUpdatedAt && (
-                  <span className="text-[10px] font-medium text-purple-300">
-                    • {formatRelativeTime(riderUpdatedAt)}
-                  </span>
+                  <span className="text-[10px] font-medium text-purple-300 shrink-0">• {formatRelativeTime(riderUpdatedAt)}</span>
                 )}
               </div>
             )}
-          </div>
-        </>
+          </>
+        )}
+      </div>
+
+      {showTimeline && (
+        <TripTimeline
+          status={status}
+          stops={timeline.stops}
+          totalKm={timeline.totalKm}
+          totalMin={timeline.totalMin}
+          steps={timeline.steps}
+          source={route?.result.source || null}
+          loading={routeLoading}
+        />
       )}
     </div>
   );

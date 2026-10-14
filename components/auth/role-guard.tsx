@@ -18,19 +18,29 @@ export function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
   useEffect(() => {
     if (!loading) {
       if (!user) {
-        router.push("/login");
+        router.replace("/login");
       } else if (role && !allowedRoles.includes(role)) {
-        router.push("/unauthorized");
+        router.replace("/unauthorized");
       }
     }
   }, [user, role, loading, allowedRoles, router]);
+
+  // Signed out (or session expired): quietly hand over to the login page
+  if (!loading && !user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-slate-50 dark:bg-slate-950">
+        <Loader2 className="w-7 h-7 animate-spin text-[#12B76A]" />
+        <span className="text-xs text-slate-500">Redirecting to sign in…</span>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-4 p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-sm text-center">
           <div className="relative">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#142B49] via-[#2563EB] to-[#0D9488] flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#027A48] via-[#039855] to-[#12B76A] flex items-center justify-center shadow-lg shadow-blue-500/20">
               <Loader2 className="w-7 h-7 text-white animate-spin" />
             </div>
             <div className="absolute -inset-1 rounded-2xl bg-blue-500/20 blur-md -z-10" />
@@ -44,7 +54,7 @@ export function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
     );
   }
 
-  if (!user || (role && !allowedRoles.includes(role))) {
+  if (role && !allowedRoles.includes(role)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
         <div className="max-w-md w-full bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-lg border border-red-200 dark:border-red-900/50 text-center">
@@ -57,7 +67,7 @@ export function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
           </p>
           <button
             onClick={() => router.push(`/dashboard`)}
-            className="mt-6 px-4 py-2 bg-[#142B49] hover:bg-[#0f2138] text-white rounded-lg text-sm font-medium transition"
+            className="mt-6 px-4 py-2 bg-[#039855] hover:bg-[#027A48] text-white rounded-lg text-sm font-medium transition"
           >
             Go to Your Dashboard
           </button>

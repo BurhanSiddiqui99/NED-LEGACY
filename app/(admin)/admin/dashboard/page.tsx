@@ -2,14 +2,22 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { isActiveStatus } from "@/lib/logistics";
 import { ordersService } from "@/services/orders.service";
 import { ridersService } from "@/services/riders.service";
 import { usersService } from "@/services/users.service";
 import { AppUser, Order, Rider } from "@/types";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { AnalyticsCharts } from "@/components/dashboard/analytics-chart";
+import dynamic from "next/dynamic";
+
+// Recharts is ~100 kB; split it out so the stats render first
+const AnalyticsCharts = dynamic(
+  () => import("@/components/dashboard/analytics-chart").then((m) => m.AnalyticsCharts),
+  { ssr: false, loading: () => <div className="h-80 rounded-2xl lp-skeleton" /> }
+);
 import { OrderTable } from "@/components/orders/order-table";
 import { PriorityAnalytics } from "@/components/dashboard/priority-analytics";
+import { RejectionsPanel } from "@/components/admin/rejections-panel";
 import {
   Package,
   Users,
@@ -53,22 +61,22 @@ export default function AdminDashboardPage() {
   const totalOrders = orders.length;
   const pendingOrders = orders.filter((o) => o.status === "pending").length;
   const activeDeliveries = orders.filter(
-    (o) => o.status === "accepted" || o.status === "picked_up" || o.status === "in_transit"
+    (o) => isActiveStatus(o.status)
   ).length;
   const completedOrders = orders.filter((o) => o.status === "delivered").length;
 
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-r from-[#142B49] via-[#0f2138] to-[#1e3a5f] text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="p-6 md:p-8 rounded-3xl lp-brand-gradient text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/10 backdrop-blur-md text-purple-300 border border-white/10">
-            <ShieldCheck className="w-3.5 h-3.5 text-purple-400" /> Logistics Master Admin
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/10 backdrop-blur-md text-white border border-white/20">
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-300" /> Logistics Master Admin
           </div>
           <h1 className="text-xl md:text-2xl font-black tracking-tight">
             LogiPulse Pakistan Operations Center
           </h1>
-          <p className="text-xs text-slate-300 max-w-xl">
+          <p className="text-xs text-white/80 max-w-xl">
             Live operations overview across senders, active motorcycle couriers, delivery milestones, and fleet capacity.
           </p>
         </div>
@@ -76,7 +84,7 @@ export default function AdminDashboardPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/admin/orders"
-            className="py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl text-xs transition flex items-center gap-2 shadow-lg shadow-blue-600/30"
+            className="py-2.5 px-4 bg-white hover:bg-white/90 text-violet-700 font-bold rounded-2xl text-xs transition flex items-center gap-2 shadow-lg shadow-black/10 hover:-translate-y-0.5"
           >
             <Package className="w-4 h-4" />
             <span>Manage All Orders</span>
@@ -85,7 +93,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* 7 Core Overview Statistics Cards (Section 10 Requirement) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lp-stagger">
         <StatCard
           title="Total Customers"
           value={totalCustomers}
@@ -140,12 +148,14 @@ export default function AdminDashboardPage() {
       {/* Day 2: live NORMAL / HIGH / URGENT counts */}
       <PriorityAnalytics orders={orders} />
 
+      <RejectionsPanel orders={orders} />
+
       {/* Recharts Visualizations */}
       <AnalyticsCharts orders={orders} />
 
       {/* Realtime Master Orders Management Table */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
               Live Fleet Dispatches ({orders.length})

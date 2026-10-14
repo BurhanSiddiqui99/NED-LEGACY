@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { isActiveStatus } from "@/lib/logistics";
 import { ordersService } from "@/services/orders.service";
 import { Order } from "@/types";
 import { StatCard } from "@/components/dashboard/stat-card";
@@ -35,29 +36,29 @@ export default function CustomerDashboardPage() {
   const totalOrders = orders.length;
   const pendingOrders = orders.filter((o) => o.status === "pending").length;
   const activeDeliveries = orders.filter(
-    (o) => o.status === "accepted" || o.status === "picked_up" || o.status === "in_transit"
+    (o) => isActiveStatus(o.status)
   ).length;
   const completedDeliveries = orders.filter((o) => o.status === "delivered").length;
 
   return (
     <div className="space-y-6">
       {/* Welcome Banner */}
-      <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-r from-[#142B49] via-[#1d3c63] to-[#2563EB] text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden">
+      <div className="p-6 md:p-8 rounded-3xl lp-brand-gradient text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden">
         <div className="space-y-1.5 z-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/10 backdrop-blur-md text-teal-300 border border-white/10">
-            <Sparkles className="w-3 h-3 text-teal-400" /> Customer Control Panel
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/10 backdrop-blur-md text-white border border-white/20">
+            <Sparkles className="w-3 h-3 text-amber-300" /> Customer Control Panel
           </div>
           <h1 className="text-xl md:text-2xl font-black tracking-tight">
             Hello, {user?.fullName || "Courier Sender"}
           </h1>
-          <p className="text-xs text-slate-200 max-w-xl">
+          <p className="text-xs text-white/80 max-w-xl">
             Book rapid on-demand courier deliveries across Pakistan, track live riders, and coordinate pickups seamlessly.
           </p>
         </div>
 
         <Link
           href="/customer/create-order"
-          className="z-10 py-3 px-5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold rounded-2xl text-xs transition flex items-center gap-2 shadow-lg shadow-teal-500/30 shrink-0"
+          className="z-10 py-3 px-5 bg-white hover:bg-white/90 text-violet-700 font-extrabold rounded-2xl text-xs transition flex items-center gap-2 shadow-lg shadow-black/10 hover:-translate-y-0.5 shrink-0"
         >
           <PackagePlus className="w-4 h-4" />
           <span>New Courier Delivery</span>
@@ -68,7 +69,7 @@ export default function CustomerDashboardPage() {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lp-stagger">
         <StatCard
           title="Total Orders"
           value={totalOrders}
@@ -101,7 +102,7 @@ export default function CustomerDashboardPage() {
 
       {/* Recent Orders Section */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
               Recent Orders & Tracking

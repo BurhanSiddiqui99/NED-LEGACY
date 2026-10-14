@@ -6,6 +6,7 @@ import { Rider } from "@/types";
 import { formatDateTime } from "@/lib/utils";
 import { Bike, ShieldCheck, ShieldAlert, Search, Power, CheckCircle, Award } from "lucide-react";
 import { toast } from "sonner";
+import { WAREHOUSES, getWarehouse } from "@/lib/logistics";
 
 export default function AdminRidersPage() {
   const [riders, setRiders] = useState<Rider[]>([]);
@@ -29,6 +30,17 @@ export default function AdminRidersPage() {
       r.vehicleNumber.toLowerCase().includes(term)
     );
   });
+
+  const handleCityChange = async (rider: Rider, warehouseId: string) => {
+    const wh = getWarehouse(warehouseId);
+    if (!wh) return;
+    try {
+      await ridersService.setCity(rider.uid, wh.id, wh.city);
+      toast.success(`${rider.fullName || "Rider"} now delivers in ${wh.city}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update city");
+    }
+  };
 
   const handleToggleVerification = async (rider: Rider) => {
     try {
@@ -74,6 +86,7 @@ export default function AdminRidersPage() {
             <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider text-[11px]">
               <tr>
                 <th className="py-3.5 px-4">Courier Partner</th>
+                <th className="py-3.5 px-4">City</th>
                 <th className="py-3.5 px-4">Vehicle Specs</th>
                 <th className="py-3.5 px-4">Registration Plate</th>
                 <th className="py-3.5 px-4">Live Availability</th>
@@ -85,7 +98,7 @@ export default function AdminRidersPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
               {filteredRiders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <Bike className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
                     No riders found matching query.
                   </td>
@@ -105,6 +118,24 @@ export default function AdminRidersPage() {
                           </span>
                         </div>
                       </div>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <select
+                        value={rider.warehouseId || ""}
+                        onChange={(e) => handleCityChange(rider, e.target.value)}
+                        aria-label={`City for ${rider.fullName || "rider"}`}
+                        className="text-xs px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                      >
+                        <option value="" disabled>
+                          Not set
+                        </option>
+                        {WAREHOUSES.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.city}
+                          </option>
+                        ))}
+                      </select>
                     </td>
 
                     <td className="py-3.5 px-4 font-medium text-slate-800 dark:text-slate-200">

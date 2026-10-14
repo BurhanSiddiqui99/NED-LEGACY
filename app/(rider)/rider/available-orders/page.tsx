@@ -14,7 +14,9 @@ import {
 } from "@/constants";
 import { calculateDistance, formatDistance } from "@/lib/distance";
 import { toMillis } from "@/lib/firebase/firestore";
+import { getActiveLeg, getOrderStartWarehouseId, getWarehouse, nearestWarehouse } from "@/lib/logistics";
 import { LocationSelector } from "@/components/rider/location-selector";
+import { RiderCityCard } from "@/components/rider/rider-city-card";
 import { NearbyOrderCard } from "@/components/rider/nearby-order-card";
 import { PriorityBadge } from "@/components/orders/priority-badge";
 import {
@@ -28,7 +30,13 @@ import {
   Flame,
   Scale,
 } from "lucide-react";
-import { AvailableOrdersMap } from "@/components/maps/available-orders-map";
+import dynamic from "next/dynamic";
+
+// Only downloaded when the rider switches to the map view
+const AvailableOrdersMap = dynamic(
+  () => import("@/components/maps/available-orders-map").then((m) => m.AvailableOrdersMap),
+  { ssr: false, loading: () => <div className="h-[540px] rounded-3xl lp-skeleton" /> }
+);
 
 type SortMode = "smart" | "nearest" | "priority" | "newest";
 
@@ -39,7 +47,7 @@ type RankedOrder = Order & {
 };
 
 export default function AvailableOrdersPage() {
-  const { user, riderProfile } = useAuth();
+  const { user, riderProfile, riderWarehouseId } = useAuth();
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,11 +67,12 @@ export default function AvailableOrdersPage() {
 
   useEffect(() => {
     const unsub = ordersService.subscribeAvailableOrders((data) => {
-      setOrders(data);
+      // Orders this rider rejected stay open for everyone else but leave this rider's feed
+      setOrders(data.filter((o) => !user || !o.rejectedBy?.includes(user.uid)));
       setLoading(false);
     });
     return () => unsub();
-  }, []);
+  }, [user]);
 
   const handleLocationChange = async (newLoc: GeoLocation) => {
     setRiderLocation(newLoc);
@@ -72,25 +81,34 @@ export default function AvailableOrdersPage() {
     }
   };
 
+  // Riders only see jobs that start in their registered home city
+  const riderCity = useMemo(
+    () => getWarehouse(riderWarehouseId) || nearestWarehouse(riderLocation).warehouse,
+    [riderWarehouseId, riderLocation]
+  );
+  const otherCityCount = useMemo(
+    () => orders.filter((o) => getOrderStartWarehouseId(o) !== riderCity.id).length,
+    [orders, riderCity.id]
+  );
+
   // Every order gets a live Haversine distance from the rider, then a decision score
   // that combines that distance with its priority weight (lower score = better pick).
   const rankedOrders: RankedOrder[] = useMemo(() => {
-    return orders.map((order) => {
-      const distKm = calculateDistance(
-        riderLocation.latitude,
-        riderLocation.longitude,
-        order.pickupLocation.latitude,
-        order.pickupLocation.longitude
-      );
-      const priorityLevel = getOrderPriority(order);
-      return {
-        ...order,
-        calculatedDistanceKm: distKm,
-        priorityLevel,
-        decisionScore: getPriorityScore(distKm, priorityLevel),
-      };
-    });
-  }, [orders, riderLocation]);
+    return orders
+      .filter((order) => getOrderStartWarehouseId(order) === riderCity.id)
+      .map((order) => {
+        // First-mile jobs start at the customer; last-mile jobs start at the destination warehouse
+        const start = getActiveLeg(order).from;
+        const distKm = calculateDistance(riderLocation.latitude, riderLocation.longitude, start.latitude, start.longitude);
+        const priorityLevel = getOrderPriority(order);
+        return {
+          ...order,
+          calculatedDistanceKm: distKm,
+          priorityLevel,
+          decisionScore: getPriorityScore(distKm, priorityLevel),
+        };
+      });
+  }, [orders, riderLocation, riderCity.id]);
 
   const processedOrders = useMemo(() => {
     const maxKm = { all: Infinity, "2km": 2, "5km": 5, "10km": 10, "25km": 25 }[distanceFilter] ?? Infinity;
@@ -148,16 +166,20 @@ export default function AvailableOrdersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-bold text-slate-900 dark:text-white">
               Smart Nearby Pickup Feed
             </h1>
+            <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">
+              Your city: {riderCity.city}
+            </span>
             <span className="text-[10px] font-bold text-teal-600 bg-teal-50 dark:bg-teal-950/60 px-2.5 py-0.5 rounded-full border border-teal-200 dark:border-teal-800">
               Live Radar
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Pending orders ranked by Haversine distance from your position, weighted by delivery priority.
+            Jobs in {riderCity.city} only, ranked by Haversine distance from your position and weighted by priority.
+            {otherCityCount > 0 && ` ${otherCityCount} job(s) in other cities are hidden.`}
           </p>
         </div>
 
@@ -182,8 +204,10 @@ export default function AvailableOrdersPage() {
         </div>
       </div>
 
+      <RiderCityCard />
+
       {/* Rider Position Bar */}
-      <LocationSelector currentLocation={riderLocation} onLocationChange={handleLocationChange} />
+      <LocationSelector currentLocation={riderLocation} onLocationChange={handleLocationChange} city={riderCity.city} />
 
       {/* Filter and Sorting Controls */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
@@ -253,7 +277,7 @@ export default function AvailableOrdersPage() {
               <Filter className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" /> Radius:
             </span>
             {[
-              { id: "all", label: "All Pakistan" },
+              { id: "all", label: `All ${riderCity.city}` },
               { id: "2km", label: "2 km" },
               { id: "5km", label: "5 km" },
               { id: "10km", label: "10 km" },
@@ -264,7 +288,7 @@ export default function AvailableOrdersPage() {
                 onClick={() => setDistanceFilter(chip.id)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
                   distanceFilter === chip.id
-                    ? "bg-[#142B49] text-white shadow-sm dark:bg-blue-600"
+                    ? "bg-[#039855] text-white shadow-sm dark:bg-blue-600"
                     : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                 }`}
               >
@@ -284,7 +308,7 @@ export default function AvailableOrdersPage() {
                 onClick={() => setPriorityFilter(p)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
                   priorityFilter === p
-                    ? "bg-[#142B49] text-white shadow-sm dark:bg-blue-600"
+                    ? "bg-[#039855] text-white shadow-sm dark:bg-blue-600"
                     : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                 }`}
               >
@@ -361,11 +385,11 @@ export default function AvailableOrdersPage() {
             No Available Orders Match These Filters
           </h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
-            Switch the radius to &quot;All Pakistan&quot;, clear the priority filter, or update your position above.
+            Switch the radius to &quot;All {riderCity.city}&quot; or clear the priority filter. You only see jobs in your registered city.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lp-stagger">
           {processedOrders.map((order) => (
             <NearbyOrderCard
               key={order.id}

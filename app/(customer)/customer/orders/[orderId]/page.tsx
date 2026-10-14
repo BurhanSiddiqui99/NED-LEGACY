@@ -1,12 +1,20 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { ChatButton } from "@/components/chat/chat-button";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { ordersService } from "@/services/orders.service";
 import { Order } from "@/types";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { PriorityBadge } from "@/components/orders/priority-badge";
+import { CHECKPOINT_LABELS, getActiveLeg, getNextTransition } from "@/lib/logistics";
+import { OtpEntry } from "@/components/orders/otp-entry";
+import { OrderStatusHero } from "@/components/orders/order-status-hero";
+import { VerificationStatusCard } from "@/components/orders/verification-status-card";
+import { StatusModal } from "@/components/animations/status-modal";
+import { ParcelSceneVariant } from "@/components/animations/parcel-scenes";
+import { OrderStatus } from "@/types";
 import { getOrderPriority, isTrackable } from "@/constants";
 import { OrderTimeline } from "@/components/orders/order-timeline";
 import { formatDateTime, formatPKR } from "@/lib/utils";
@@ -27,7 +35,13 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
-import { GoogleMapTracker } from "@/components/maps/google-map-tracker";
+import dynamic from "next/dynamic";
+
+// Google Maps is the heaviest part of this page; load it after the order details render
+const GoogleMapTracker = dynamic(
+  () => import("@/components/maps/google-map-tracker").then((m) => m.GoogleMapTracker),
+  { ssr: false, loading: () => <div className="h-[360px] rounded-3xl lp-skeleton" /> }
+);
 
 export default function CustomerOrderDetailPage() {
   const params = useParams();
@@ -39,12 +53,33 @@ export default function CustomerOrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [moment, setMoment] = useState<{ variant: ParcelSceneVariant; title: string; message: string } | null>(null);
+  const lastStatusRef = useRef<OrderStatus | null>(null);
 
   useEffect(() => {
     if (!orderId) return;
+    lastStatusRef.current = null;
     const unsub = ordersService.subscribeById(orderId, (data) => {
       setOrder(data);
       setLoading(false);
+
+      // Celebrate live status changes pushed by the rider (not the status we loaded with)
+      const prev = lastStatusRef.current;
+      lastStatusRef.current = data?.status || null;
+      if (!data || !prev || prev === data.status) return;
+      const rider = data.riderName || "Your rider";
+      const moments: Partial<Record<OrderStatus, { variant: ParcelSceneVariant; title: string; message: string }>> = {
+        accepted: { variant: "pickup", title: "Rider assigned!", message: `${rider} accepted your order and is heading to pickup.` },
+        picked_up: { variant: "pickup", title: "Parcel picked up", message: `${rider} has collected your parcel.` },
+        in_transit: { variant: "transit", title: "On the way!", message: `${rider} is on the move with your parcel. Follow along on the live map.` },
+        at_origin_warehouse: { variant: "packing", title: "Received at the warehouse", message: `Your parcel is safely at the ${data.originCity} warehouse.` },
+        linehaul: { variant: "transit", title: "Travelling between cities", message: `${data.originCity} → ${data.destinationCity}.` },
+        at_destination_warehouse: { variant: "searching", title: `Arrived in ${data.destinationCity}`, message: "Assigning a local rider for the final delivery." },
+        last_mile_accepted: { variant: "pickup", title: "Delivery rider assigned", message: `${rider} will collect your parcel from the warehouse.` },
+        out_for_delivery: { variant: "transit", title: "Out for delivery", message: `${rider} is on the way. Keep your delivery code ready.` },
+        delivered: { variant: "delivered", title: "Delivered 🎉", message: "Your parcel was handed to the recipient." },
+      };
+      if (moments[data.status]) setMoment(moments[data.status]!);
     });
     return () => unsub();
   }, [orderId]);
@@ -54,8 +89,8 @@ export default function CustomerOrderDetailPage() {
     setCancelling(true);
     try {
       await ordersService.cancel(order.id, user.uid);
-      toast.success("Delivery request has been cancelled.");
       setShowCancelModal(false);
+      setMoment({ variant: "burst", title: "Request cancelled", message: "Your delivery request was removed from the rider feed." });
     } catch (err: any) {
       toast.error(err.message || "Failed to cancel order");
     } finally {
@@ -82,7 +117,7 @@ export default function CustomerOrderDetailPage() {
         </p>
         <Link
           href="/customer/orders"
-          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#142B49] text-white rounded-xl text-xs font-semibold"
+          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#039855] text-white rounded-xl text-xs font-semibold"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to My Orders
         </Link>
@@ -98,7 +133,16 @@ export default function CustomerOrderDetailPage() {
   );
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto lp-page-enter">
+      <StatusModal
+        open={!!moment}
+        variant={moment?.variant || "transit"}
+        title={moment?.title || ""}
+        message={moment?.message}
+        primaryAction={{ label: "Got it", onClick: () => setMoment(null) }}
+        onClose={() => setMoment(null)}
+      />
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -123,16 +167,13 @@ export default function CustomerOrderDetailPage() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          {order.riderId && order.status !== "delivered" && order.status !== "cancelled" && (
-            <Link
-              href={`/customer/messages/${order.id}`}
-              className="py-2 px-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span>Chat with Rider</span>
-            </Link>
-          )}
+        <div className="flex flex-wrap items-center gap-2">
+          <ChatButton
+            order={order}
+            href={`/customer/messages/${order.id}`}
+            label="Chat with Rider"
+            className="py-2 px-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
+          />
 
           {order.status === "pending" && (
             <button
@@ -145,6 +186,30 @@ export default function CustomerOrderDetailPage() {
           )}
         </div>
       </div>
+
+      <OrderStatusHero order={order} />
+
+      {/* The rider has a code for the customer right now: put the input front and centre */}
+      {(() => {
+        const t = getNextTransition(order);
+        const cp = t?.checkpoint;
+        const waiting =
+          cp && t?.parties?.includes("customer") && order.verifications?.[cp]?.challenges?.customer && !order.verifications?.[cp]?.verifiedBy?.customer;
+        if (!waiting || !cp) return null;
+        return (
+          <div className="p-4 sm:p-5 rounded-3xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 space-y-2 animate-in fade-in duration-300">
+            <p className="text-sm font-black text-amber-900 dark:text-amber-200">
+              {order.riderName || "Your rider"} is here. Ask them for the OTP.
+            </p>
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              The rider received a 6-digit code on their email. Enter it to confirm the {CHECKPOINT_LABELS[cp].toLowerCase()}.
+            </p>
+            <div className="max-w-sm">
+              <OtpEntry order={order} checkpoint={cp} party="customer" />
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Tracking timeline & Route */}
@@ -161,12 +226,14 @@ export default function CustomerOrderDetailPage() {
               </span>
             </div>
             <GoogleMapTracker
-              pickupLocation={order.pickupLocation}
-              pickupAddress={order.pickupAddress}
-              deliveryLocation={order.deliveryLocation}
-              deliveryAddress={order.deliveryAddress}
+              pickupLocation={getActiveLeg(order).from}
+              pickupAddress={getActiveLeg(order).fromLabel}
+              deliveryLocation={getActiveLeg(order).to}
+              deliveryAddress={getActiveLeg(order).toLabel}
+              riderHeadingToStart={getActiveLeg(order).riderHeadingToStart}
               riderLocation={isTrackable(order) ? order.currentRiderLocation : null}
               riderUpdatedAt={order.riderLocationUpdatedAt}
+              showTimeline
               riderName={order.riderName}
               status={order.status}
               height="360px"
@@ -233,6 +300,7 @@ export default function CustomerOrderDetailPage() {
 
         {/* Right Column: Assigned Rider & Package Specs */}
         <div className="space-y-6">
+          <VerificationStatusCard order={order} viewer="customer" />
           {/* Assigned Rider Card */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
             <h3 className="font-bold text-sm text-slate-900 dark:text-white">
@@ -242,7 +310,7 @@ export default function CustomerOrderDetailPage() {
             {order.riderId && order.riderName ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#142B49] to-[#2563EB] text-white flex items-center justify-center font-bold text-base shadow-sm">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#039855] to-[#12B76A] text-white flex items-center justify-center font-bold text-base shadow-sm">
                     <Bike className="w-6 h-6" />
                   </div>
                   <div>
@@ -262,15 +330,13 @@ export default function CustomerOrderDetailPage() {
                   </div>
                 )}
 
-                {order.status !== "delivered" && order.status !== "cancelled" && (
-                  <Link
-                    href={`/customer/messages/${order.id}`}
-                    className="w-full py-2.5 px-3 bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-sm"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Open Direct Courier Chat</span>
-                  </Link>
-                )}
+                <ChatButton
+                  order={order}
+                  href={`/customer/messages/${order.id}`}
+                  label="Open Direct Courier Chat"
+                  iconClassName="w-3.5 h-3.5"
+                  className="w-full py-2.5 px-3 bg-[#12B76A] hover:bg-[#039855] text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-sm"
+                />
               </div>
             ) : (
               <div className="p-5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/40 text-center space-y-2">

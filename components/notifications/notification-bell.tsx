@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 export function NotificationBell() {
-  const { user } = useAuth();
+  const { user, riderWarehouseId } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -59,11 +59,11 @@ export function NotificationBell() {
           }
         }
       });
-    });
+    }, riderWarehouseId);
 
     return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, user?.role]);
+  }, [user?.uid, user?.role, riderWarehouseId]);
 
   const openOrder = (orderId: string) => {
     if (user?.role === "customer") router.push(`/customer/orders/${orderId}`);
@@ -99,7 +99,7 @@ export function NotificationBell() {
 
   const handleMarkAllRead = async () => {
     if (!user) return;
-    await notificationsService.markAllAsRead(user.uid, user.role);
+    await notificationsService.markAllAsRead(user.uid, user.role, riderWarehouseId);
   };
 
   const handleNotificationClick = async (notif: AppNotification) => {

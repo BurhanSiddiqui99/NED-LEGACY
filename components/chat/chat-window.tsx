@@ -8,6 +8,7 @@ import { MessageBubble } from "./message-bubble";
 import { MessageInput } from "./message-input";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { toast } from "sonner";
+import { getChatAvailability } from "@/lib/chat";
 import {
   MessageSquare,
   Bike,
@@ -50,6 +51,9 @@ export function ChatWindow({ order, backHref }: ChatWindowProps) {
     : `Order #${order.id} Participants`;
 
   const receiverPhone = isCustomer ? order.riderPhone : order.customerPhone;
+
+  // Riders can only chat on the order they currently hold; admins see history but cannot post into a closed chat
+  const chat = getChatAvailability(order, user?.role === "rider" ? user.uid : undefined);
 
   useEffect(() => {
     if (!order.id) return;
@@ -108,7 +112,7 @@ export function ChatWindow({ order, backHref }: ChatWindowProps) {
             </Link>
           )}
 
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#142B49] to-[#2563EB] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-md">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#039855] to-[#12B76A] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-md">
             {isAdmin ? (
               <ShieldCheck className="w-5 h-5 text-purple-300" />
             ) : isCustomer ? (
@@ -148,13 +152,18 @@ export function ChatWindow({ order, backHref }: ChatWindowProps) {
         </div>
       </div>
 
-      {/* Pending status informational banner */}
-      {order.status === "pending" && !order.riderId && (
-        <div className="bg-amber-50 dark:bg-amber-950/40 px-4 py-2 border-b border-amber-200 dark:border-amber-900/40 flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
-          <Clock className="w-4 h-4 animate-pulse shrink-0" />
-          <span>
-            Looking for a nearby rider. You can chat with <strong>LogiPulse Support Dispatch</strong> right here while your order is broadcasting.
-          </span>
+      {/* Closed-chat banner: cancelled, delivered, or no rider assigned yet */}
+      {!chat.open && (
+        <div
+          className={`px-4 py-2 border-b flex items-center gap-2 text-xs ${
+            order.status === "cancelled"
+              ? "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-300"
+              : "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300"
+          }`}
+          role="status"
+        >
+          <Clock className="w-4 h-4 shrink-0" />
+          <span>{chat.reason}</span>
         </div>
       )}
 
@@ -191,7 +200,7 @@ export function ChatWindow({ order, backHref }: ChatWindowProps) {
       {/* Message Input Bar */}
       <MessageInput
         onSendMessage={handleSendMessage}
-        disabled={order.status === "delivered" || order.status === "cancelled"}
+        disabled={!chat.open}
       />
     </div>
   );

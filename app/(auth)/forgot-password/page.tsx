@@ -28,7 +28,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#142B49] via-[#0f2138] to-[#0b1829] flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#039855] via-[#027A48] to-[#022C1B] flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200/20">
         <Link
           href="/login"
@@ -51,7 +51,7 @@ export default function ForgotPasswordPage() {
             <div className="pt-4">
               <Link
                 href="/login"
-                className="w-full py-2.5 px-4 bg-[#142B49] hover:bg-[#0f2138] text-white rounded-xl text-xs font-bold inline-block text-center transition"
+                className="w-full py-2.5 px-4 bg-[#039855] hover:bg-[#027A48] text-white rounded-xl text-xs font-bold inline-block text-center transition"
               >
                 Return to Login
               </Link>
@@ -88,7 +88,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 bg-[#142B49] hover:bg-[#0f2138] text-white font-bold rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-3 px-4 bg-[#039855] hover:bg-[#027A48] text-white font-bold rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {loading ? (
                 <>

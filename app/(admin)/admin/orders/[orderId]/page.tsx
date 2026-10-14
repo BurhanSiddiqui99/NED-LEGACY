@@ -6,6 +6,10 @@ import { ordersService } from "@/services/orders.service";
 import { Order } from "@/types";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { PriorityBadge } from "@/components/orders/priority-badge";
+import { getActiveLeg } from "@/lib/logistics";
+import { OrderStatusHero } from "@/components/orders/order-status-hero";
+import { VerificationStatusCard } from "@/components/orders/verification-status-card";
+import { OrderOpsPanel } from "@/components/admin/order-ops-panel";
 import { PRIORITY_CONFIG, PRIORITY_LEVELS, getOrderPriority, isTrackable } from "@/constants";
 import { OrderPriority } from "@/types";
 import { toast } from "sonner";
@@ -26,7 +30,13 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
-import { GoogleMapTracker } from "@/components/maps/google-map-tracker";
+import dynamic from "next/dynamic";
+
+// Google Maps is the heaviest part of this page; load it after the order details render
+const GoogleMapTracker = dynamic(
+  () => import("@/components/maps/google-map-tracker").then((m) => m.GoogleMapTracker),
+  { ssr: false, loading: () => <div className="h-[360px] rounded-3xl lp-skeleton" /> }
+);
 
 export default function AdminOrderDetailPage() {
   const params = useParams();
@@ -76,7 +86,7 @@ export default function AdminOrderDetailPage() {
         </p>
         <Link
           href="/admin/orders"
-          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#142B49] text-white rounded-xl text-xs font-semibold"
+          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#039855] text-white rounded-xl text-xs font-semibold"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to All Orders
         </Link>
@@ -92,9 +102,9 @@ export default function AdminOrderDetailPage() {
   );
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto lp-page-enter">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link
             href="/admin/orders"
@@ -103,7 +113,7 @@ export default function AdminOrderDetailPage() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-slate-900 dark:text-white font-mono">
                 Order #{order.id}
               </h1>
@@ -118,12 +128,14 @@ export default function AdminOrderDetailPage() {
 
         <Link
           href={`/admin/messages/${order.id}`}
-          className="py-2 px-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
+          className="self-start sm:self-auto py-2 px-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
         >
           <MessageSquare className="w-4 h-4" />
           <span>Open Real-Time Chat</span>
         </Link>
       </div>
+
+      <OrderStatusHero order={order} viewer="admin" />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Timeline & Route */}
@@ -140,12 +152,14 @@ export default function AdminOrderDetailPage() {
               </span>
             </div>
             <GoogleMapTracker
-              pickupLocation={order.pickupLocation}
-              pickupAddress={order.pickupAddress}
-              deliveryLocation={order.deliveryLocation}
-              deliveryAddress={order.deliveryAddress}
+              pickupLocation={getActiveLeg(order).from}
+              pickupAddress={getActiveLeg(order).fromLabel}
+              deliveryLocation={getActiveLeg(order).to}
+              deliveryAddress={getActiveLeg(order).toLabel}
+              riderHeadingToStart={getActiveLeg(order).riderHeadingToStart}
               riderLocation={isTrackable(order) ? order.currentRiderLocation : null}
               riderUpdatedAt={order.riderLocationUpdatedAt}
+              showTimeline
               riderName={order.riderName}
               status={order.status}
               height="360px"
@@ -200,6 +214,8 @@ export default function AdminOrderDetailPage() {
 
         {/* Right Column: Customer, Rider, Package */}
         <div className="space-y-6">
+          <OrderOpsPanel order={order} />
+          <VerificationStatusCard order={order} viewer="admin" />
           {/* Day 2: Priority escalation */}
           {order.status !== "delivered" && order.status !== "cancelled" && (
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">

@@ -3,7 +3,13 @@
 import React, { useEffect, useState } from "react";
 import { ordersService } from "@/services/orders.service";
 import { Order } from "@/types";
-import { AnalyticsCharts } from "@/components/dashboard/analytics-chart";
+import dynamic from "next/dynamic";
+
+// Recharts is ~100 kB; split it out so the stats render first
+const AnalyticsCharts = dynamic(
+  () => import("@/components/dashboard/analytics-chart").then((m) => m.AnalyticsCharts),
+  { ssr: false, loading: () => <div className="h-80 rounded-2xl lp-skeleton" /> }
+);
 import { StatCard } from "@/components/dashboard/stat-card";
 import { formatPKR } from "@/lib/utils";
 import {
@@ -52,7 +58,7 @@ export default function AdminAnalyticsPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lp-stagger">
         <StatCard
           title="Delivered Gross Volume"
           value={formatPKR(totalGrossRevenue)}

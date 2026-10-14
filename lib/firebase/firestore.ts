@@ -16,7 +16,7 @@ import {
   QueryDocumentSnapshot,
   Unsubscribe,
 } from "firebase/firestore";
-import { db, isFirebaseConfigured } from "./config";
+import { auth, db, isFirebaseConfigured } from "./config";
 import { MockStore } from "./mock-store";
 import {
   AppNotification,
@@ -26,14 +26,39 @@ import {
   Order,
   OrderPriority,
   OrderStatus,
+  OtpChallenge,
   Rider,
+  RiderRejection,
   UserRole,
+  VerificationCheckpoint,
+  VerificationParty,
 } from "@/types";
-import { NEXT_ALLOWED_STATUS, PRIORITY_CONFIG, STATUS_CONFIG, getOrderPriority } from "@/constants";
+import { PRIORITY_CONFIG, STATUS_CONFIG, getOrderPriority } from "@/constants";
+import {
+  CLAIMABLE_STATUSES,
+  cityRidersInbox,
+  getDeliveryType,
+  getNextTransition,
+  getOrderStartWarehouseId,
+  nearestWarehouse,
+} from "@/lib/logistics";
 
 /* =========================================================================
    SHARED HELPERS
    ========================================================================= */
+
+/**
+ * Logs a realtime listener failure. Right after sign-out every open listener fails with
+ * permission-denied before its component unmounts; those are expected and not logged.
+ */
+function logListenError(label: string, err: unknown) {
+  if (isFirebaseConfigured && !auth?.currentUser) return;
+  console.error(`Firestore ${label} error:`, err);
+}
+
+function isSignedOut(): boolean {
+  return isFirebaseConfigured && !auth?.currentUser;
+}
 
 /** Converts Firestore Timestamps, ISO strings, Dates and epoch numbers into epoch millis. */
 export function toMillis(val: any): number {
@@ -75,10 +100,16 @@ function statusLabel(status: OrderStatus): string {
  * Besides their own uid, admins share the "admin" inbox, riders share the "riders"
  * broadcast inbox (new delivery requests), and everyone reads "all" (system alerts).
  */
-export function getNotificationRecipients(userId: string, role?: UserRole | null): string[] {
+export function getNotificationRecipients(
+  userId: string,
+  role?: UserRole | null,
+  // Riders also get new-job alerts for the city they are currently in
+  riderWarehouseId?: string | null
+): string[] {
   const ids = [userId, "all"];
   if (role === "admin") ids.push("admin");
   if (role === "rider") ids.push("riders");
+  if (role === "rider" && riderWarehouseId) ids.push(cityRidersInbox(riderWarehouseId));
   return Array.from(new Set(ids));
 }
 
@@ -95,13 +126,48 @@ async function notify(
    ORDERS
    ========================================================================= */
 
+/** Firestore rejects `undefined` values, so drop them before writing. */
+function withoutUndefined<T extends Record<string, any>>(obj: T): T {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+}
+
+/**
+ * Read-modify-write on one order. In Firestore this runs as a transaction, so concurrent
+ * writers (two riders accepting, rider + admin at a warehouse) cannot overwrite each other.
+ */
+async function mutateOrder(orderId: string, mutate: (current: Order) => Partial<Order>): Promise<Order> {
+  if (isFirebaseConfigured && db) {
+    const ref = doc(db, "orders", orderId);
+    return runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error("Order not found.");
+      const current = docToOrder(snap);
+      const updates = withoutUndefined({ ...mutate(current) });
+      tx.update(ref, { ...updates, updatedAt: serverTimestamp() });
+      return { ...current, ...updates, updatedAt: new Date().toISOString() } as Order;
+    });
+  }
+
+  const current = MockStore.getOrder(orderId);
+  if (!current) throw new Error("Order not found.");
+  const updated = { ...current, ...withoutUndefined({ ...mutate(current) }), updatedAt: new Date().toISOString() } as Order;
+  MockStore.saveOrder(updated);
+  return updated;
+}
+
+function historyEntry(status: OrderStatus, by?: string) {
+  return { status, at: new Date().toISOString(), by };
+}
+
 export async function createOrder(
   orderData: Omit<Order, "id" | "status" | "createdAt" | "updatedAt" | "riderId">
 ): Promise<Order> {
   const priority = getOrderPriority(orderData);
   let orderId = "LP-" + Math.floor(10000 + Math.random() * 90000);
+  const intercity = orderData.deliveryType === "intercity";
 
   const priorityTag = priority === "normal" ? "" : `[${PRIORITY_CONFIG[priority].label.toUpperCase()}] `;
+  const routeTag = intercity ? ` (${orderData.originCity} → ${orderData.destinationCity})` : "";
   const announce = async () => {
     await notify([orderData.customerId], {
       title: "Order Placed Successfully",
@@ -110,17 +176,31 @@ export async function createOrder(
       orderId,
     });
     await notify(["admin"], {
-      title: `${priorityTag}New Delivery Request`,
-      message: `Order #${orderId} by ${orderData.customerName || "a customer"}: ${orderData.packageDescription}`,
+      title: `${priorityTag}New ${intercity ? "Intercity " : ""}Delivery Request`,
+      message: `Order #${orderId}${routeTag} by ${orderData.customerName || "a customer"}: ${orderData.packageDescription}`,
       type: "order_created",
       orderId,
     });
-    await notify(["riders"], {
+    // Only riders in the pickup city are told about a new request
+    const pickupWarehouseId = orderData.originWarehouseId || nearestWarehouse(orderData.pickupLocation).warehouse.id;
+    await notify([cityRidersInbox(pickupWarehouseId)], {
       title: `${priorityTag}New Delivery Available`,
       message: `Pickup at ${orderData.pickupAddress.split(",")[0]}. Open Nearby Pickups to accept #${orderId}.`,
       type: "order_created",
       orderId,
     });
+  };
+
+  const base = {
+    ...orderData,
+    priority,
+    deliveryType: orderData.deliveryType || "intracity",
+    riderId: null,
+    riderIds: [],
+    rejectedBy: [],
+    rejections: [],
+    status: "pending" as OrderStatus,
+    statusHistory: [historyEntry("pending", orderData.customerId)],
   };
 
   if (isFirebaseConfigured && db) {
@@ -131,15 +211,12 @@ export async function createOrder(
       orderId = "LP-" + Math.floor(10000 + Math.random() * 90000);
     }
 
-    const newOrder: Order = {
-      ...orderData,
-      priority,
+    const newOrder = withoutUndefined({
+      ...base,
       id: orderId,
-      riderId: null,
-      status: "pending",
       createdAt: serverTimestamp() as any,
       updatedAt: serverTimestamp() as any,
-    };
+    }) as Order;
 
     await setDoc(doc(db, "orders", orderId), newOrder);
     await announce();
@@ -148,16 +225,13 @@ export async function createOrder(
 
   // Demo store mode
   const now = new Date().toISOString();
-  const newOrder: Order = {
-    ...orderData,
-    priority,
+  const newOrder = withoutUndefined({
+    ...base,
     id: orderId,
-    riderId: null,
-    status: "pending",
     createdAt: now,
     updatedAt: now,
     price: orderData.price ?? Math.floor(250 + Math.random() * 350),
-  };
+  }) as Order;
 
   MockStore.saveOrder(newOrder);
   await announce();
@@ -170,7 +244,7 @@ export async function getOrderById(orderId: string): Promise<Order | null> {
       const snap = await getDoc(doc(db, "orders", orderId));
       return snap.exists() ? docToOrder(snap) : null;
     } catch (err) {
-      console.error("Firestore getOrderById error:", err);
+      logListenError("getOrderById", err);
       return null;
     }
   }
@@ -183,7 +257,7 @@ export function subscribeToOrder(orderId: string, callback: (order: Order | null
       doc(db, "orders", orderId),
       (snap) => callback(snap.exists() ? docToOrder(snap) : null),
       (err) => {
-        console.error("Firestore subscribeToOrder error:", err);
+        logListenError("subscribeToOrder", err);
         callback(null);
       }
     );
@@ -205,7 +279,7 @@ export function subscribeToCustomerOrders(
       q,
       (snap) => callback(sortOrdersDesc(snap.docs.map(docToOrder))),
       (err) => {
-        console.error("Firestore subscribeToCustomerOrders error:", err);
+        logListenError("subscribeToCustomerOrders", err);
         callback([]);
       }
     );
@@ -218,50 +292,82 @@ export function subscribeToCustomerOrders(
   return MockStore.subscribe(update);
 }
 
+/**
+ * Orders a rider can claim: new requests (first mile) and intercity parcels waiting at a
+ * destination warehouse (last mile). Orders this rider has rejected are filtered out by the caller.
+ */
 export function subscribeToAvailableOrders(callback: (orders: Order[]) => void): Unsubscribe {
   if (isFirebaseConfigured && db) {
-    // Both filters are equalities, so Firestore serves this from single-field indexes.
-    // Filtering on riderId == null also matches the security rule for riders.
-    const q = query(
-      collection(db, "orders"),
-      where("status", "==", "pending"),
-      where("riderId", "==", null)
+    const firestore = db;
+    // One equality-only listener per claimable status: served by single-field indexes and
+    // matching the security rule (riderId == null) exactly.
+    const buckets = new Map<OrderStatus, Order[]>();
+    const emit = () => callback(sortOrdersDesc(Array.from(buckets.values()).flat()));
+    const unsubs = CLAIMABLE_STATUSES.map((status) =>
+      onSnapshot(
+        query(collection(firestore, "orders"), where("status", "==", status), where("riderId", "==", null)),
+        (snap) => {
+          buckets.set(status, snap.docs.map(docToOrder));
+          emit();
+        },
+        (err) => {
+          logListenError(`available orders (${status})`, err);
+          buckets.set(status, []);
+          emit();
+        }
+      )
     );
-    return onSnapshot(
-      q,
-      (snap) => callback(sortOrdersDesc(snap.docs.map(docToOrder))),
-      (err) => {
-        console.error("Firestore subscribeToAvailableOrders error:", err);
-        callback([]);
-      }
-    );
+    return () => unsubs.forEach((u) => u());
   }
 
   const update = () => {
-    callback(sortOrdersDesc(MockStore.getOrders().filter((o) => o.status === "pending" && !o.riderId)));
+    callback(sortOrdersDesc(MockStore.getOrders().filter((o) => CLAIMABLE_STATUSES.includes(o.status) && !o.riderId)));
   };
   update();
   return MockStore.subscribe(update);
 }
 
+/** Every order the rider is or was responsible for (current assignment + earlier legs). */
 export function subscribeToRiderOrders(
   riderId: string,
   callback: (orders: Order[]) => void
 ): Unsubscribe {
   if (isFirebaseConfigured && db) {
-    const q = query(collection(db, "orders"), where("riderId", "==", riderId));
-    return onSnapshot(
-      q,
-      (snap) => callback(sortOrdersDesc(snap.docs.map(docToOrder))),
-      (err) => {
-        console.error("Firestore subscribeToRiderOrders error:", err);
-        callback([]);
-      }
+    const firestore = db;
+    let current: Order[] = [];
+    let history: Order[] = [];
+    const emit = () => {
+      const byId = new Map<string, Order>();
+      [...history, ...current].forEach((o) => byId.set(o.id, o));
+      callback(sortOrdersDesc(Array.from(byId.values())));
+    };
+    const onErr = (err: Error) => logListenError("subscribeToRiderOrders", err);
+    const u1 = onSnapshot(
+      query(collection(firestore, "orders"), where("riderId", "==", riderId)),
+      (snap) => {
+        current = snap.docs.map(docToOrder);
+        emit();
+      },
+      onErr
     );
+    const u2 = onSnapshot(
+      query(collection(firestore, "orders"), where("riderIds", "array-contains", riderId)),
+      (snap) => {
+        history = snap.docs.map(docToOrder);
+        emit();
+      },
+      onErr
+    );
+    return () => {
+      u1();
+      u2();
+    };
   }
 
   const update = () => {
-    callback(sortOrdersDesc(MockStore.getOrders().filter((o) => o.riderId === riderId)));
+    callback(
+      sortOrdersDesc(MockStore.getOrders().filter((o) => o.riderId === riderId || o.riderIds?.includes(riderId)))
+    );
   };
   update();
   return MockStore.subscribe(update);
@@ -275,7 +381,8 @@ export function subscribeToAllOrders(callback: (orders: Order[]) => void): Unsub
       collection(firestore, "orders"),
       (snap) => callback(sortOrdersDesc(snap.docs.map(docToOrder))),
       (err) => {
-        console.error("Firestore subscribeToAllOrders error:", err);
+        logListenError("subscribeToAllOrders", err);
+        if (isSignedOut()) return;
         getDocs(collection(firestore, "orders"))
           .then((snap) => callback(sortOrdersDesc(snap.docs.map(docToOrder))))
           .catch((e) => {
@@ -292,75 +399,51 @@ export function subscribeToAllOrders(callback: (orders: Order[]) => void): Unsub
 }
 
 /**
- * Atomically accepts an order. The transaction re-reads the order on the server, so if two
- * riders tap "Accept" at the same time only the first commit wins; the second sees
- * riderId already set and gets a clear error.
+ * Claims an order from the nearby feed. Handles both legs: a new request (first mile) and an
+ * intercity parcel waiting at the destination warehouse (last mile). Runs in a transaction,
+ * so if two riders tap "Accept" together only the first commit wins.
  */
 export async function acceptOrder(orderId: string, rider: Rider): Promise<Order> {
   const riderVehicle = `${rider.vehicleType} (${rider.vehicleNumber})`;
-  let accepted: Order;
+  const now = new Date().toISOString();
 
-  if (isFirebaseConfigured && db) {
-    const orderRef = doc(db, "orders", orderId);
-    accepted = await runTransaction(db, async (transaction) => {
-      const orderDoc = await transaction.get(orderRef);
-      if (!orderDoc.exists()) {
-        throw new Error("Order does not exist.");
-      }
-      const data = orderDoc.data() as Order;
-      if (data.status !== "pending" || data.riderId) {
-        throw new Error("Order has already been accepted by another rider.");
-      }
-
-      const updates: Partial<Order> = {
-        riderId: rider.uid,
-        riderName: rider.fullName || "Rider",
-        riderPhone: rider.phone || "",
-        riderVehicle,
-        status: "accepted",
-        currentRiderLocation: rider.currentLocation || null,
-        riderLocationUpdatedAt: serverTimestamp() as any,
-        acceptedAt: serverTimestamp() as any,
-        updatedAt: serverTimestamp() as any,
-      };
-
-      transaction.update(orderRef, updates);
-      return { ...data, ...updates, id: orderId } as Order;
-    });
-  } else {
-    const order = MockStore.getOrder(orderId);
-    if (!order) {
-      throw new Error("Order not found.");
-    }
-    if (order.status !== "pending" || order.riderId) {
+  const accepted = await mutateOrder(orderId, (current) => {
+    if (!CLAIMABLE_STATUSES.includes(current.status) || current.riderId) {
       throw new Error("Order has already been accepted by another rider.");
     }
-
-    const now = new Date().toISOString();
-    accepted = {
-      ...order,
+    if (rider.warehouseId && getOrderStartWarehouseId(current) !== rider.warehouseId) {
+      throw new Error(`This job is outside your city (${rider.city || "home city"}).`);
+    }
+    const lastMile = current.status === "at_destination_warehouse";
+    const next: OrderStatus = lastMile ? "last_mile_accepted" : "accepted";
+    return {
       riderId: rider.uid,
-      riderName: rider.fullName || "Tariq Mahmood",
-      riderPhone: rider.phone || "+92 321 7654321",
+      riderName: rider.fullName || "Rider",
+      riderPhone: rider.phone || "",
       riderVehicle,
-      status: "accepted",
+      status: next,
+      riderIds: Array.from(new Set([...(current.riderIds || []), rider.uid])),
+      ...(lastMile
+        ? {}
+        : { firstMileRiderId: rider.uid, firstMileRiderName: rider.fullName || "Rider", acceptedAt: now }),
       currentRiderLocation: rider.currentLocation || null,
       riderLocationUpdatedAt: now,
-      acceptedAt: now,
-      updatedAt: now,
+      statusHistory: [...(current.statusHistory || []), historyEntry(next, rider.uid)],
     };
-    MockStore.saveOrder(accepted);
-  }
+  });
 
+  const lastMile = accepted.status === "last_mile_accepted";
   await notify([accepted.customerId], {
-    title: "Rider Assigned!",
-    message: `${accepted.riderName || "A rider"} accepted order #${orderId} and is heading to pickup.`,
+    title: lastMile ? "Last-mile rider assigned" : "Rider Assigned!",
+    message: lastMile
+      ? `${accepted.riderName} will collect #${orderId} from the ${accepted.destinationCity} warehouse and deliver it.`
+      : `${accepted.riderName} accepted order #${orderId} and is heading to pickup.`,
     type: "order_accepted",
     orderId,
   });
   await notify(["admin"], {
-    title: "Order Accepted",
-    message: `${accepted.riderName || "A rider"} accepted order #${orderId}.`,
+    title: lastMile ? "Last-mile rider assigned" : "Order Accepted",
+    message: `${accepted.riderName} accepted order #${orderId}.`,
     type: "order_accepted",
     orderId,
   });
@@ -369,112 +452,240 @@ export async function acceptOrder(orderId: string, rider: Rider): Promise<Order>
 }
 
 /**
- * Updates order status with strict sequential validation:
- * accepted -> picked_up -> in_transit -> delivered
+ * A rider declines a request. The order stays open for every other nearby rider, disappears
+ * from this rider's feed, and the rejection (with reason) is logged for the admin.
  */
-export async function updateOrderStatus(
-  orderId: string,
-  newStatus: OrderStatus,
-  actorRiderId?: string
-): Promise<Order> {
-  const validate = (current: Order) => {
-    if (actorRiderId && current.riderId !== actorRiderId) {
-      throw new Error("Unauthorized: Only the assigned rider can update delivery status.");
+export async function rejectOrder(orderId: string, rider: Rider, reason: string): Promise<void> {
+  const cleanReason = reason.trim().slice(0, 200) || "No reason given";
+  const order = await mutateOrder(orderId, (current) => {
+    if (!CLAIMABLE_STATUSES.includes(current.status) || current.riderId) {
+      throw new Error("This order is no longer open.");
     }
-    const allowed = NEXT_ALLOWED_STATUS[current.status] || [];
-    if (!allowed.includes(newStatus)) {
-      throw new Error(
-        `Invalid transition: Cannot move from '${current.status}' to '${newStatus}'. Allowed: ${allowed.join(", ") || "none"}`
-      );
-    }
-  };
-
-  let updated: Order;
-
-  if (isFirebaseConfigured && db) {
-    const orderRef = doc(db, "orders", orderId);
-    updated = await runTransaction(db, async (transaction) => {
-      const snap = await transaction.get(orderRef);
-      if (!snap.exists()) throw new Error("Order not found.");
-      const current = docToOrder(snap);
-      validate(current);
-
-      const updates: Partial<Order> = {
-        status: newStatus,
-        updatedAt: serverTimestamp() as any,
-      };
-      if (newStatus === "delivered") {
-        updates.deliveredAt = serverTimestamp() as any;
-      }
-      transaction.update(orderRef, updates);
-      return { ...current, ...updates, updatedAt: new Date().toISOString() } as Order;
-    });
-
-    if (newStatus === "delivered" && updated.riderId) {
-      try {
-        await updateDoc(doc(db, "riders", updated.riderId), {
-          completedDeliveries: increment(1),
-          updatedAt: serverTimestamp(),
-        });
-      } catch (e) {
-        console.warn("Could not increment rider delivery count:", e);
-      }
-    }
-  } else {
-    const current = MockStore.getOrder(orderId);
-    if (!current) throw new Error("Order not found.");
-    validate(current);
-
-    const now = new Date().toISOString();
-    updated = {
-      ...current,
-      status: newStatus,
-      updatedAt: now,
-      deliveredAt: newStatus === "delivered" ? now : current.deliveredAt,
+    if (current.rejectedBy?.includes(rider.uid)) return {};
+    const rejection: RiderRejection = {
+      riderId: rider.uid,
+      riderName: rider.fullName || "Rider",
+      reason: cleanReason,
+      at: new Date().toISOString(),
+      leg: current.status === "at_destination_warehouse" ? "last_mile" : "first_mile",
     };
-    MockStore.saveOrder(updated);
+    return {
+      rejectedBy: [...(current.rejectedBy || []), rider.uid],
+      rejections: [...(current.rejections || []), rejection],
+    };
+  });
 
-    if (newStatus === "delivered" && updated.riderId) {
-      const rider = MockStore.getRider(updated.riderId);
-      if (rider) {
-        MockStore.saveRider({ ...rider, completedDeliveries: (rider.completedDeliveries || 0) + 1 });
-      }
+  await notify(["admin"], {
+    title: `Order #${orderId} rejected by ${rider.fullName || "a rider"}`,
+    message: `Reason: ${cleanReason}. ${order.rejections?.length || 1} rejection(s) so far; still visible to other riders.`,
+    type: "order_rejected",
+    orderId,
+  });
+}
+
+const CHECKPOINT_PLACES: Record<VerificationCheckpoint, string> = {
+  pickup: "pickup",
+  origin_warehouse: "warehouse drop-off",
+  warehouse_handover: "warehouse handover",
+  delivery: "delivery",
+};
+
+/** Saves the server-signed OTP token for one party at a checkpoint (the code itself is only emailed). */
+export async function recordOtpChallenge(
+  orderId: string,
+  checkpoint: VerificationCheckpoint,
+  party: VerificationParty,
+  challenge: OtpChallenge
+): Promise<void> {
+  const order = await mutateOrder(orderId, (current) => {
+    const record = current.verifications?.[checkpoint] || {};
+    const verifiedBy = { ...(record.verifiedBy || {}) };
+    delete verifiedBy[party];
+    return {
+      verifications: {
+        ...(current.verifications || {}),
+        [checkpoint]: { ...record, challenges: { ...(record.challenges || {}), [party]: challenge }, verifiedBy },
+      },
+    };
+  });
+
+  // Tell the verifying party to ask the rider for the code
+  await notify([party === "customer" ? order.customerId : "admin"], {
+    title: `Verify ${CHECKPOINT_PLACES[checkpoint]} for #${orderId}`,
+    message: `${order.riderName || "The rider"} has a verification code. Ask them for it and enter it on the order page.`,
+    type: "verification",
+    orderId,
+  });
+}
+
+export function isCheckpointVerified(order: Order, checkpoint: VerificationCheckpoint, parties: VerificationParty[]): boolean {
+  const verifiedBy = order.verifications?.[checkpoint]?.verifiedBy || {};
+  return parties.every((p) => Boolean(verifiedBy[p]));
+}
+
+const STATUS_MESSAGES: Partial<Record<OrderStatus, (o: Order) => string>> = {
+  picked_up: (o) => `${o.riderName || "Your rider"} collected order #${o.id} (verified with the OTP).`,
+  in_transit: (o) =>
+    getDeliveryType(o) === "intercity"
+      ? `Order #${o.id} is on the way to the ${o.originCity} warehouse.`
+      : `Order #${o.id} is on the way to the drop-off.`,
+  at_origin_warehouse: (o) => `Order #${o.id} was received at the ${o.originCity} warehouse.`,
+  linehaul: (o) => `Order #${o.id} left ${o.originCity} for the ${o.destinationCity} warehouse.`,
+  at_destination_warehouse: (o) => `Order #${o.id} arrived at the ${o.destinationCity} warehouse. Assigning a delivery rider.`,
+  out_for_delivery: (o) => `${o.riderName || "A rider"} collected order #${o.id} from the warehouse and is out for delivery.`,
+  delivered: (o) => `Order #${o.id} was delivered (verified with the OTP).`,
+};
+
+/** Field changes for moving `current` one step to `to` (shared by rider/admin actions and OTP auto-completion). */
+function transitionUpdates(current: Order, to: OrderStatus, actorUid: string): Partial<Order> {
+  const transition = getNextTransition(current);
+  const now = new Date().toISOString();
+  const updates: Partial<Order> = {
+    status: to,
+    statusHistory: [...(current.statusHistory || []), historyEntry(to, actorUid)],
+  };
+  if (transition?.checkpoint) {
+    const record = current.verifications?.[transition.checkpoint] || {};
+    updates.verifications = {
+      ...(current.verifications || {}),
+      [transition.checkpoint]: { ...record, completedAt: now },
+    };
+  }
+  if (to === "delivered") updates.deliveredAt = now;
+  // First-mile rider's job ends at the origin warehouse; the order waits there without a rider
+  if (to === "at_origin_warehouse") {
+    updates.riderId = null;
+    updates.currentRiderLocation = null;
+  }
+  return updates;
+}
+
+/** Notifications and rider stats after a step completes. */
+async function afterTransition(updated: Order, to: OrderStatus, previousRiderId: string | null) {
+  const orderId = updated.id;
+
+  // Count completed jobs for the rider whose leg just finished
+  if ((to === "delivered" || to === "at_origin_warehouse") && previousRiderId) {
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, "riders", previousRiderId), { completedDeliveries: increment(1), updatedAt: serverTimestamp() }).catch(
+        (e) => console.warn("Could not increment rider delivery count:", e)
+      );
+    } else {
+      const rider = MockStore.getRider(previousRiderId);
+      if (rider) MockStore.saveRider({ ...rider, completedDeliveries: (rider.completedDeliveries || 0) + 1 });
     }
   }
 
-  const label = statusLabel(newStatus);
-  const type = newStatus === "delivered" ? "delivery_completed" : "status_updated";
-  await notify([updated.customerId], {
-    title: `Order ${label}`,
-    message:
-      newStatus === "cancelled"
-        ? `Your order #${orderId} was cancelled.`
-        : `Your order #${orderId} is now ${label}.`,
-    type,
-    orderId,
-  });
-  await notify(["admin"], {
-    title: `Order #${orderId}: ${label}`,
-    message: `${updated.riderName || "Order"} moved #${orderId} to ${label}.`,
-    type,
-    orderId,
+  const label = statusLabel(to);
+  const type = to === "delivered" ? "delivery_completed" : "status_updated";
+  const message = STATUS_MESSAGES[to]?.(updated) || `Order #${orderId} is now ${label}.`;
+  await notify([updated.customerId], { title: `Order ${label}`, message, type, orderId });
+  await notify(["admin"], { title: `Order #${orderId}: ${label}`, message, type, orderId });
+  if (previousRiderId && (to === "picked_up" || to === "delivered" || to === "at_origin_warehouse" || to === "out_for_delivery")) {
+    await notify([previousRiderId], { title: `Verified: ${label}`, message, type, orderId });
+  }
+  if (to === "at_destination_warehouse") {
+    await notify([updated.destinationWarehouseId ? cityRidersInbox(updated.destinationWarehouseId) : "riders"], {
+      title: "Parcel ready for last-mile delivery",
+      message: `#${orderId} is waiting at the ${updated.destinationCity} warehouse. Open Nearby Pickups to claim it.`,
+      type: "order_created",
+      orderId,
+    });
+  }
+}
+
+/**
+ * Marks a party's OTP as confirmed (called only after /api/otp/verify accepted the code).
+ * When this was the last code the current step needed, the step completes in the same write:
+ * the customer entering the rider's pickup code *is* the pickup.
+ */
+export async function recordVerification(
+  orderId: string,
+  checkpoint: VerificationCheckpoint,
+  party: VerificationParty,
+  actorUid: string
+): Promise<{ order: Order; completedStep: OrderStatus | null }> {
+  let completedStep: OrderStatus | null = null;
+  let previousRiderId: string | null = null;
+
+  const order = await mutateOrder(orderId, (current) => {
+    const record = current.verifications?.[checkpoint] || {};
+    const verifications = {
+      ...(current.verifications || {}),
+      [checkpoint]: { ...record, verifiedBy: { ...(record.verifiedBy || {}), [party]: new Date().toISOString() } },
+    };
+    const withCode = { ...current, verifications } as Order;
+
+    const transition = getNextTransition(current);
+    if (
+      transition?.checkpoint === checkpoint &&
+      isCheckpointVerified(withCode, checkpoint, transition.parties || [])
+    ) {
+      completedStep = transition.to;
+      previousRiderId = current.riderId;
+      return transitionUpdates(withCode, transition.to, actorUid);
+    }
+    return { verifications };
   });
 
+  if (completedStep) await afterTransition(order, completedStep, previousRiderId);
+  return { order, completedStep };
+}
+
+/**
+ * Moves an order one step along its workflow (lib/logistics.ts) for steps without an OTP
+ * (rider: start ride; admin: dispatch / arrival). OTP steps complete automatically in recordVerification.
+ */
+export async function advanceOrder(
+  orderId: string,
+  to: OrderStatus,
+  actor: { uid: string; role: UserRole | null; name?: string }
+): Promise<Order> {
+  let previousRiderId: string | null = null;
+
+  const updated = await mutateOrder(orderId, (current) => {
+    const transition = getNextTransition(current);
+    if (!transition || transition.to !== to) {
+      throw new Error(`Invalid step: '${STATUS_CONFIG[current.status]?.label}' cannot move to '${STATUS_CONFIG[to]?.label}'.`);
+    }
+    if (transition.actor === "rider" && current.riderId !== actor.uid) {
+      throw new Error("Only the assigned rider can complete this step.");
+    }
+    if (transition.actor === "admin" && actor.role !== "admin") {
+      throw new Error("Only an admin can complete this step.");
+    }
+    if (transition.checkpoint && !isCheckpointVerified(current, transition.checkpoint, transition.parties || [])) {
+      throw new Error("Waiting for the OTP to be verified.");
+    }
+    previousRiderId = current.riderId;
+    return transitionUpdates(current, to, actor.uid);
+  });
+
+  await afterTransition(updated, to, previousRiderId);
   return updated;
 }
 
 export async function cancelOrder(orderId: string, actorId: string): Promise<Order> {
-  const order = await getOrderById(orderId);
-  if (!order) throw new Error("Order not found.");
+  const updated = await mutateOrder(orderId, (current) => {
+    if (current.customerId !== actorId) {
+      throw new Error("Only the customer who placed this order can cancel it.");
+    }
+    if (current.status !== "pending") {
+      throw new Error("Only pending orders can be cancelled.");
+    }
+    return {
+      status: "cancelled",
+      statusHistory: [...(current.statusHistory || []), historyEntry("cancelled", actorId)],
+    };
+  });
 
-  if (order.customerId !== actorId) {
-    throw new Error("Only the customer who placed this order can cancel it.");
-  }
-  if (order.status !== "pending") {
-    throw new Error("Only pending orders can be cancelled.");
-  }
-
-  return updateOrderStatus(orderId, "cancelled");
+  await notify(["admin"], {
+    title: `Order #${orderId} cancelled`,
+    message: `${updated.customerName || "The customer"} cancelled the request.`,
+    type: "status_updated",
+    orderId,
+  });
+  return updated;
 }
 
 /** Admin escalation: change an order's priority (e.g. bump to URGENT during peak hours). */
@@ -546,6 +757,21 @@ export async function getRiderProfile(uid: string): Promise<Rider | null> {
   return MockStore.getRider(uid);
 }
 
+export function subscribeToRiderProfile(uid: string, callback: (rider: Rider | null) => void): Unsubscribe {
+  if (isFirebaseConfigured && db) {
+    return onSnapshot(
+      doc(db, "riders", uid),
+      (snap) => callback(snap.exists() ? (snapData(snap) as Rider) : null),
+      (err) => {
+        logListenError("subscribeToRiderProfile", err);
+      }
+    );
+  }
+  const update = () => callback(MockStore.getRider(uid));
+  update();
+  return MockStore.subscribe(update);
+}
+
 export async function updateRiderLocation(
   uid: string,
   latitude: number,
@@ -592,7 +818,7 @@ export function subscribeToAllRiders(callback: (riders: Rider[]) => void): Unsub
       collection(db, "riders"),
       (snap) => callback(snap.docs.map((d) => snapData(d) as Rider)),
       (err) => {
-        console.error("Firestore subscribeToAllRiders error:", err);
+        logListenError("subscribeToAllRiders", err);
         callback([]);
       }
     );
@@ -612,7 +838,7 @@ export function subscribeToAllUsers(callback: (users: AppUser[]) => void): Unsub
       collection(db, "users"),
       (snap) => callback(snap.docs.map((d) => snapData(d) as AppUser)),
       (err) => {
-        console.error("Firestore subscribeToAllUsers error:", err);
+        logListenError("subscribeToAllUsers", err);
         callback([]);
       }
     );
@@ -620,6 +846,15 @@ export function subscribeToAllUsers(callback: (users: AppUser[]) => void): Unsub
   const update = () => callback(MockStore.getUsers());
   update();
   return MockStore.subscribe(update);
+}
+
+/** Email for OTP delivery on orders created before customerEmail was stored on the order. */
+export async function getUserEmail(uid: string): Promise<string | null> {
+  if (isFirebaseConfigured && db) {
+    const snap = await getDoc(doc(db, "users", uid));
+    return snap.exists() ? (snap.data() as AppUser).email || null : null;
+  }
+  return MockStore.getUser(uid)?.email || null;
 }
 
 export async function toggleUserActive(uid: string, currentStatus: boolean): Promise<void> {
@@ -638,6 +873,16 @@ export async function toggleUserActive(uid: string, currentStatus: boolean): Pro
       updatedAt: new Date().toISOString(),
     });
   }
+}
+
+/** Admin: assign or change the city a rider works in. */
+export async function setRiderCity(uid: string, warehouseId: string, city: string): Promise<void> {
+  if (isFirebaseConfigured && db) {
+    await updateDoc(doc(db, "riders", uid), { warehouseId, city, updatedAt: serverTimestamp() });
+    return;
+  }
+  const rider = MockStore.getRider(uid);
+  if (rider) MockStore.saveRider({ ...rider, warehouseId, city });
 }
 
 export async function toggleRiderVerification(uid: string, currentStatus: boolean): Promise<void> {
@@ -729,9 +974,9 @@ export function subscribeToMessages(
         callback(msgs);
       },
       (err) => {
-        console.error("Firestore subscribeToMessages error:", err);
+        logListenError("subscribeToMessages", err);
         callback([]);
-        onError?.(err);
+        if (!isSignedOut()) onError?.(err);
       }
     );
   }
@@ -778,9 +1023,10 @@ export async function createNotification(
 export function subscribeToNotifications(
   userId: string,
   role: UserRole | null | undefined,
-  callback: (notifications: AppNotification[]) => void
+  callback: (notifications: AppNotification[]) => void,
+  riderWarehouseId?: string | null
 ): Unsubscribe {
-  const recipients = getNotificationRecipients(userId, role);
+  const recipients = getNotificationRecipients(userId, role, riderWarehouseId);
 
   if (isFirebaseConfigured && db) {
     const q = query(collection(db, "notifications"), where("userId", "in", recipients));
@@ -795,7 +1041,7 @@ export function subscribeToNotifications(
         callback(notifs);
       },
       (err) => {
-        console.error("Firestore subscribeToNotifications error:", err);
+        logListenError("subscribeToNotifications", err);
         callback([]);
       }
     );
@@ -818,8 +1064,12 @@ export async function markNotificationAsRead(id: string): Promise<void> {
   MockStore.markNotificationRead(id);
 }
 
-export async function markAllNotificationsAsRead(userId: string, role?: UserRole | null): Promise<void> {
-  const recipients = getNotificationRecipients(userId, role);
+export async function markAllNotificationsAsRead(
+  userId: string,
+  role?: UserRole | null,
+  riderWarehouseId?: string | null
+): Promise<void> {
+  const recipients = getNotificationRecipients(userId, role, riderWarehouseId);
 
   if (isFirebaseConfigured && db) {
     const firestore = db;

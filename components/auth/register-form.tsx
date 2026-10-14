@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
+import { WAREHOUSES } from "@/lib/logistics";
 import {
   User,
   Bike,
@@ -43,6 +44,7 @@ export function RegisterForm() {
   // Rider specific fields
   const [vehicleType, setVehicleType] = useState("Motorcycle (Honda 70/125)");
   const [vehicleNumber, setVehicleNumber] = useState("KHI-");
+  const [riderWarehouseId, setRiderWarehouseId] = useState(WAREHOUSES[0].id);
 
   const [loading, setLoading] = useState(false);
 
@@ -99,6 +101,7 @@ export function RegisterForm() {
           role: "rider",
           vehicleType,
           vehicleNumber: vehicleNumber.trim(),
+          warehouseId: riderWarehouseId,
         });
         router.push("/rider/dashboard");
       }
@@ -122,7 +125,7 @@ export function RegisterForm() {
           }}
           className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${
             role === "customer"
-              ? "bg-white dark:bg-slate-900 text-[#142B49] dark:text-white shadow-sm"
+              ? "bg-white dark:bg-slate-900 text-[#039855] dark:text-white shadow-sm"
               : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
           }`}
         >
@@ -138,7 +141,7 @@ export function RegisterForm() {
           }}
           className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${
             role === "rider"
-              ? "bg-white dark:bg-slate-900 text-[#142B49] dark:text-white shadow-sm"
+              ? "bg-white dark:bg-slate-900 text-[#039855] dark:text-white shadow-sm"
               : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
           }`}
         >
@@ -241,6 +244,28 @@ export function RegisterForm() {
             <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">
               Delivery Partner Vehicle Registration
             </span>
+
+            <div>
+              <label htmlFor="rider-city" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                City you will deliver in *
+              </label>
+              <select
+                id="rider-city"
+                value={riderWarehouseId}
+                onChange={(e) => setRiderWarehouseId(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              >
+                {WAREHOUSES.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.city} ({w.province})
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-500 mt-1">
+                You will only see jobs in this city: customer pickups, and parcels waiting at{" "}
+                {WAREHOUSES.find((w) => w.id === riderWarehouseId)?.name}.
+              </p>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -345,7 +370,7 @@ export function RegisterForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 px-4 bg-[#142B49] hover:bg-[#0f2138] text-white font-bold rounded-xl text-xs shadow-lg shadow-blue-900/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+          className="w-full py-3 px-4 bg-[#039855] hover:bg-[#027A48] text-white font-bold rounded-xl text-xs shadow-lg shadow-blue-900/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {loading ? (
             <>

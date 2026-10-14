@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { RouteTransitionOverlay } from "@/components/animations/route-transition-overlay";
 
 export function LoginForm() {
   const router = useRouter();
@@ -25,6 +26,12 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [redirectingTo, setRedirectingTo] = useState<string | null>(null);
+
+  // Warm up every dashboard while the user is typing, so the redirect after sign-in is instant
+  useEffect(() => {
+    ["/customer/dashboard", "/rider/dashboard", "/admin/dashboard"].forEach((r) => router.prefetch(r));
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,10 +47,10 @@ export function LoginForm() {
     setLoading(true);
     try {
       const loggedUser = await login(email, password);
-      router.push(`/${loggedUser.role}/dashboard`);
+      setRedirectingTo(loggedUser.role);
+      router.replace(`/${loggedUser.role}/dashboard`);
     } catch (err: any) {
       setApiError(err.message || "Failed to sign in. Please verify your email and password.");
-    } finally {
       setLoading(false);
     }
   };
@@ -51,6 +58,8 @@ export function LoginForm() {
 
   return (
     <div className="space-y-6">
+      {redirectingTo && <RouteTransitionOverlay label={`Opening your ${redirectingTo} dashboard`} />}
+
       {/* API Error Alert Banner */}
       {apiError && (
         <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start justify-between gap-3 text-rose-800 dark:text-rose-200 animate-in fade-in slide-in-from-top-1 duration-200">
@@ -131,7 +140,7 @@ export function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 px-4 bg-[#142B49] hover:bg-[#0f2138] text-white font-bold rounded-xl text-xs shadow-lg shadow-blue-900/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+          className="w-full py-3 px-4 bg-[#039855] hover:bg-[#027A48] text-white font-bold rounded-xl text-xs shadow-lg shadow-blue-900/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {loading ? (
             <>

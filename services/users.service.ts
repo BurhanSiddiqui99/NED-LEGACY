@@ -1,4 +1,4 @@
-import { subscribeToAllUsers, toggleUserActive } from "@/lib/firebase/firestore";
+import { getUserEmail, subscribeToAllUsers, toggleUserActive } from "@/lib/firebase/firestore";
 import { AppUser } from "@/types";
 
 export const usersService = {
@@ -8,5 +8,9 @@ export const usersService = {
 
   async toggleActive(uid: string, currentStatus: boolean) {
     return toggleUserActive(uid, currentStatus);
+  },
+
+  async getEmail(uid: string) {
+    return getUserEmail(uid);
   },
 };

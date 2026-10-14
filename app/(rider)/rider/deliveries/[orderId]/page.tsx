@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatButton } from "@/components/chat/chat-button";
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
@@ -7,6 +8,7 @@ import { ordersService } from "@/services/orders.service";
 import { Order } from "@/types";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { PriorityBadge } from "@/components/orders/priority-badge";
+import { getActiveLeg } from "@/lib/logistics";
 import { LiveLocationSharer } from "@/components/rider/live-location-sharer";
 import { getOrderPriority, isTrackable } from "@/constants";
 import { OrderTimeline } from "@/components/orders/order-timeline";
@@ -25,7 +27,13 @@ import {
   Navigation,
 } from "lucide-react";
 import Link from "next/link";
-import { GoogleMapTracker } from "@/components/maps/google-map-tracker";
+import dynamic from "next/dynamic";
+
+// Google Maps is the heaviest part of this page; load it after the order details render
+const GoogleMapTracker = dynamic(
+  () => import("@/components/maps/google-map-tracker").then((m) => m.GoogleMapTracker),
+  { ssr: false, loading: () => <div className="h-[360px] rounded-3xl lp-skeleton" /> }
+);
 
 export default function RiderDeliveryDetailPage() {
   const params = useParams();
@@ -63,7 +71,7 @@ export default function RiderDeliveryDetailPage() {
         </p>
         <Link
           href="/rider/my-deliveries"
-          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#142B49] text-white rounded-xl text-xs font-semibold"
+          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#039855] text-white rounded-xl text-xs font-semibold"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to My Deliveries
         </Link>
@@ -79,7 +87,7 @@ export default function RiderDeliveryDetailPage() {
   );
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto lp-page-enter">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -90,7 +98,7 @@ export default function RiderDeliveryDetailPage() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-slate-900 dark:text-white font-mono">
                 #{order.id}
               </h1>
@@ -103,15 +111,13 @@ export default function RiderDeliveryDetailPage() {
           </div>
         </div>
 
-        {order.status !== "delivered" && order.status !== "cancelled" && (
-          <Link
-            href={`/rider/messages/${order.id}`}
-            className="py-2 px-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span>Chat with Customer</span>
-          </Link>
-        )}
+        <ChatButton
+          order={order}
+          riderUid={user?.uid || ""}
+          href={`/rider/messages/${order.id}`}
+          label="Chat with Customer"
+          className="self-start sm:self-auto py-2 px-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -129,12 +135,14 @@ export default function RiderDeliveryDetailPage() {
               </span>
             </div>
             <GoogleMapTracker
-              pickupLocation={order.pickupLocation}
-              pickupAddress={order.pickupAddress}
-              deliveryLocation={order.deliveryLocation}
-              deliveryAddress={order.deliveryAddress}
+              pickupLocation={getActiveLeg(order).from}
+              pickupAddress={getActiveLeg(order).fromLabel}
+              deliveryLocation={getActiveLeg(order).to}
+              deliveryAddress={getActiveLeg(order).toLabel}
+              riderHeadingToStart={getActiveLeg(order).riderHeadingToStart}
               riderLocation={isTrackable(order) ? order.currentRiderLocation : null}
               riderUpdatedAt={order.riderLocationUpdatedAt}
+              showTimeline
               riderName={order.riderName || "You"}
               status={order.status}
               height="360px"

@@ -4,6 +4,7 @@ import {
   updateRiderAvailability,
   subscribeToAllRiders,
   toggleRiderVerification,
+  setRiderCity,
 } from "@/lib/firebase/firestore";
 import { Rider } from "@/types";
 
@@ -26,5 +27,9 @@ export const ridersService = {
 
   async toggleVerification(uid: string, currentStatus: boolean) {
     return toggleRiderVerification(uid, currentStatus);
+  },
+
+  async setCity(uid: string, warehouseId: string, city: string) {
+    return setRiderCity(uid, warehouseId, city);
   },
 };

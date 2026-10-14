@@ -9,7 +9,7 @@ export default function UnauthorizedPage() {
   const { user, role } = useAuth();
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
+    <div className="min-h-screen bg-[#F5F8F6] dark:bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
       <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 shadow-xl space-y-4">
         <div className="w-16 h-16 rounded-2xl bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-400 flex items-center justify-center mx-auto shadow-sm">
           <ShieldAlert className="w-8 h-8" />
@@ -27,7 +27,7 @@ export default function UnauthorizedPage() {
         <div className="pt-4 flex flex-col sm:flex-row gap-2 justify-center">
           <Link
             href={role ? `/${role}/dashboard` : "/login"}
-            className="py-2.5 px-4 bg-[#142B49] hover:bg-[#0f2138] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md"
+            className="py-2.5 px-4 bg-[#039855] hover:bg-[#027A48] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md"
           >
             <LayoutDashboard className="w-4 h-4" />
             <span>Go to My Dashboard</span>

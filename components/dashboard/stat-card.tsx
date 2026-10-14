@@ -24,16 +24,20 @@ export function StatCard({
   colorScheme = "blue",
 }: StatCardProps) {
   const colorMap = {
-    blue: "bg-blue-100 text-blue-600 dark:bg-blue-950/70 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/40",
-    teal: "bg-teal-100 text-teal-700 dark:bg-teal-950/70 dark:text-teal-400 border border-teal-200/60 dark:border-teal-900/40",
-    amber: "bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/40",
-    purple: "bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-400 border border-purple-200/60 dark:border-purple-900/40",
-    emerald: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/40",
+    blue: { tile: "from-green-500 to-emerald-700 shadow-blue-500/30", glow: "bg-blue-500" },
+    teal: { tile: "from-orange-400 to-orange-600 shadow-pink-500/30", glow: "bg-pink-500" },
+    amber: { tile: "from-amber-400 to-orange-500 shadow-amber-500/30", glow: "bg-amber-500" },
+    purple: { tile: "from-indigo-400 to-indigo-600 shadow-indigo-500/30", glow: "bg-indigo-500" },
+    emerald: { tile: "from-emerald-400 to-green-600 shadow-emerald-500/30", glow: "bg-emerald-500" },
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition">
-      <div className="flex items-center justify-between gap-3">
+    <div className="lp-lift group relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-lg">
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full blur-2xl opacity-10 group-hover:opacity-20 transition-opacity ${colorMap[colorScheme].glow}`}
+      />
+      <div className="relative flex items-center justify-between gap-3">
         <div className="space-y-1">
           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
             {title}
@@ -44,7 +48,7 @@ export function StatCard({
         </div>
 
         <div
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${colorMap[colorScheme]}`}
+          className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 text-white bg-gradient-to-br shadow-lg ${colorMap[colorScheme].tile}`}
         >
           <Icon className="w-6 h-6 stroke-[2.2]" />
         </div>

@@ -18,6 +18,30 @@ import {
   Area,
 } from "recharts";
 
+/** Readable tooltip in both themes: solid card, dark/light text, coloured dot per series. */
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg px-3 py-2 text-xs min-w-[140px]">
+      {label && <p className="font-bold text-slate-900 dark:text-white mb-1">{label}</p>}
+      <ul className="space-y-1">
+        {payload.map((item) => (
+          <li key={item.name} className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: item.payload?.color || item.color || item.stroke }}
+              />
+              {item.name}
+            </span>
+            <span className="font-bold tabular-nums text-slate-900 dark:text-white">{item.value}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 interface AnalyticsChartsProps {
   orders: Order[];
 }
@@ -31,9 +55,15 @@ export function AnalyticsCharts({ orders }: AnalyticsChartsProps) {
 
   const statusData = [
     { name: "Pending", value: statusCounts.pending || 0, color: "#F59E0B" },
-    { name: "Accepted", value: statusCounts.accepted || 0, color: "#2563EB" },
-    { name: "Picked Up", value: statusCounts.picked_up || 0, color: "#9333EA" },
-    { name: "In Transit", value: statusCounts.in_transit || 0, color: "#0D9488" },
+    { name: "Accepted", value: statusCounts.accepted || 0, color: "#12B76A" },
+    { name: "Picked Up", value: statusCounts.picked_up || 0, color: "#84CC16" },
+    { name: "In Transit", value: statusCounts.in_transit || 0, color: "#F97316" },
+    {
+      name: "At Warehouses",
+      value: (statusCounts.at_origin_warehouse || 0) + (statusCounts.linehaul || 0) + (statusCounts.at_destination_warehouse || 0),
+      color: "#14B8A6",
+    },
+    { name: "Out for Delivery", value: (statusCounts.last_mile_accepted || 0) + (statusCounts.out_for_delivery || 0), color: "#EAB308" },
     { name: "Delivered", value: statusCounts.delivered || 0, color: "#16A34A" },
     { name: "Cancelled", value: statusCounts.cancelled || 0, color: "#DC2626" },
   ].filter((item) => item.value > 0);
@@ -89,28 +119,20 @@ export function AnalyticsCharts({ orders }: AnalyticsChartsProps) {
             <AreaChart data={last7Days}>
               <defs>
                 <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#2563EB" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#F97316" stopOpacity={0.8} />
+                  <stop offset="95%" stopColor="#F97316" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="colorDelivered" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#16A34A" stopOpacity={0.8} />
                   <stop offset="95%" stopColor="#16A34A" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.5} />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1E293B",
-                  borderRadius: "12px",
-                  border: "none",
-                  color: "#F8FAFC",
-                  fontSize: "12px",
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }} />
-              <Area type="monotone" dataKey="orders" name="New Requests" stroke="#2563EB" fillOpacity={1} fill="url(#colorOrders)" strokeWidth={2} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94A09A" strokeOpacity={0.25} />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#94A09A" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: "#94A09A" }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip content={<ChartTooltip />} cursor={{ stroke: "#12B76A", strokeOpacity: 0.3, strokeWidth: 1 }} />
+              <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }} iconType="circle" />
+              <Area type="monotone" dataKey="orders" name="New Requests" stroke="#F97316" fillOpacity={1} fill="url(#colorOrders)" strokeWidth={2} />
               <Area type="monotone" dataKey="delivered" name="Delivered" stroke="#16A34A" fillOpacity={1} fill="url(#colorDelivered)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
@@ -142,23 +164,17 @@ export function AnalyticsCharts({ orders }: AnalyticsChartsProps) {
                   cy="50%"
                   innerRadius={55}
                   outerRadius={80}
-                  paddingAngle={5}
+                  paddingAngle={4}
+                  cornerRadius={6}
+                  stroke="none"
                   dataKey="value"
                 >
                   {statusData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#1E293B",
-                    borderRadius: "12px",
-                    border: "none",
-                    color: "#F8FAFC",
-                    fontSize: "12px",
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                <Tooltip content={<ChartTooltip />} cursor={{ stroke: "#12B76A", strokeOpacity: 0.3, strokeWidth: 1 }} />
+                <Legend wrapperStyle={{ fontSize: "11px" }} iconType="circle" />
               </PieChart>
             </ResponsiveContainer>
           )}

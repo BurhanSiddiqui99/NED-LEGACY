@@ -12,6 +12,7 @@ import {
 } from "@/lib/google-maps";
 import { PRIORITY_CONFIG, getOrderPriority } from "@/constants";
 import { PriorityBadge } from "@/components/orders/priority-badge";
+import { getActiveLeg } from "@/lib/logistics";
 import { RefreshCw, Package, ArrowRight, MapPin, Bike } from "lucide-react";
 
 interface AvailableOrdersMapProps {
@@ -86,13 +87,11 @@ export function AvailableOrdersMap({
         markersRef.current = [];
 
         orders.forEach((order) => {
-          if (!order.pickupLocation?.latitude || !order.pickupLocation?.longitude) return;
+          const start = getActiveLeg(order).from;
+          if (!start?.latitude || !start?.longitude) return;
 
           const marker = new googleMaps.Marker({
-            position: {
-              lat: order.pickupLocation.latitude,
-              lng: order.pickupLocation.longitude,
-            },
+            position: { lat: start.latitude, lng: start.longitude },
             map,
             title: `Order #${order.id} [${PRIORITY_CONFIG[getOrderPriority(order)].label}]: ${order.packageDescription}`,
             icon: createMapIcon("pickup"),
@@ -109,10 +108,7 @@ export function AvailableOrdersMap({
           });
 
           markersRef.current.push(marker);
-          bounds.extend({
-            lat: order.pickupLocation.latitude,
-            lng: order.pickupLocation.longitude,
-          });
+          bounds.extend({ lat: start.latitude, lng: start.longitude });
         });
 
         if (orders.length > 0) {
@@ -184,7 +180,7 @@ export function AvailableOrdersMap({
 
           <button
             onClick={() => onSelectOrder?.(selectedOrder)}
-            className="mt-3 w-full py-2 px-3 bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20"
+            className="mt-3 w-full py-2 px-3 bg-[#12B76A] hover:bg-[#039855] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20"
           >
             <span>View Job & Accept</span>
             <ArrowRight className="w-3.5 h-3.5" />

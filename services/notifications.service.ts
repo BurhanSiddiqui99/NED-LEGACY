@@ -14,16 +14,17 @@ export const notificationsService = {
   subscribe(
     userId: string,
     role: UserRole | null | undefined,
-    callback: (notifications: AppNotification[]) => void
+    callback: (notifications: AppNotification[]) => void,
+    riderWarehouseId?: string | null
   ) {
-    return subscribeToNotifications(userId, role, callback);
+    return subscribeToNotifications(userId, role, callback, riderWarehouseId);
   },
 
   async markAsRead(notificationId: string) {
     return markNotificationAsRead(notificationId);
   },
 
-  async markAllAsRead(userId: string, role?: UserRole | null) {
-    return markAllNotificationsAsRead(userId, role);
+  async markAllAsRead(userId: string, role?: UserRole | null, riderWarehouseId?: string | null) {
+    return markAllNotificationsAsRead(userId, role, riderWarehouseId);
   },
 };

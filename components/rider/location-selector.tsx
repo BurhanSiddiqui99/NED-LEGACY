@@ -9,23 +9,27 @@ import { toast } from "sonner";
 interface LocationSelectorProps {
   currentLocation: GeoLocation;
   onLocationChange: (loc: GeoLocation, name?: string) => void;
+  // Limit hub presets to the rider's home city
+  city?: string;
 }
 
 export function LocationSelector({
   currentLocation,
   onLocationChange,
+  city,
 }: LocationSelectorProps) {
+  const presets = city ? PAKISTAN_LOCATIONS.filter((l) => l.city === city) : PAKISTAN_LOCATIONS;
   const [detecting, setDetecting] = useState(false);
 
   // Find if current coordinates match a preset
-  const matchedPreset = PAKISTAN_LOCATIONS.find(
+  const matchedPreset = presets.find(
     (l) =>
       Math.abs(l.latitude - currentLocation.latitude) < 0.005 &&
       Math.abs(l.longitude - currentLocation.longitude) < 0.005
   );
 
   const handlePresetSelect = (presetId: string) => {
-    const loc = PAKISTAN_LOCATIONS.find((l) => l.id === presetId);
+    const loc = presets.find((l) => l.id === presetId);
     if (loc) {
       onLocationChange({ latitude: loc.latitude, longitude: loc.longitude }, loc.name);
       toast.success(`Rider location updated to: ${loc.name}`);
@@ -77,9 +81,9 @@ export function LocationSelector({
           onChange={(e) => handlePresetSelect(e.target.value)}
           className="flex-1 sm:flex-none text-xs px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20"
         >
-          {Array.from(new Set(PAKISTAN_LOCATIONS.map((l) => l.city))).map((city) => (
-            <optgroup key={city} label={city}>
-              {PAKISTAN_LOCATIONS.filter((l) => l.city === city).map((loc) => (
+          {Array.from(new Set(presets.map((l) => l.city))).map((groupCity) => (
+            <optgroup key={groupCity} label={groupCity}>
+              {presets.filter((l) => l.city === groupCity).map((loc) => (
                 <option key={loc.id} value={loc.id}>
                   {loc.name}
                 </option>

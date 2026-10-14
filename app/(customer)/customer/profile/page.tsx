@@ -22,7 +22,7 @@ export default function CustomerProfilePage() {
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
         {/* Header with avatar */}
         <div className="flex items-center gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#142B49] via-[#2563EB] to-[#0D9488] text-white flex items-center justify-center font-bold text-2xl shadow-lg shadow-blue-500/20">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#027A48] via-[#039855] to-[#12B76A] text-white flex items-center justify-center font-bold text-2xl shadow-lg shadow-blue-500/20">
             {user?.fullName ? user.fullName.charAt(0).toUpperCase() : "C"}
           </div>
           <div>

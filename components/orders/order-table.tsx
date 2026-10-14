@@ -66,47 +66,68 @@ export function OrderTable({
     { value: "accepted", label: "Accepted" },
     { value: "picked_up", label: "Picked Up" },
     { value: "in_transit", label: "In Transit" },
+    { value: "at_origin_warehouse", label: "Origin Hub" },
+    { value: "linehaul", label: "Between Cities" },
+    { value: "at_destination_warehouse", label: "Destination Hub" },
+    { value: "out_for_delivery", label: "Out for Delivery" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
   ];
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-      {/* Search and Filters Header */}
-      <div className="p-4 md:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
+      {/* Row 1: search + sort */}
+      <div className="p-4 md:px-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative flex-1 min-w-0">
           <Search className="w-4 h-4 text-slate-500 dark:text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by ID, address, recipient..."
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            placeholder="Search by ID, address, recipient, rider..."
+            aria-label="Search orders"
+            className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+          className="sm:w-52 text-xs px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          aria-label="Sort orders"
+        >
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="priority">Highest priority first</option>
+        </select>
+      </div>
 
-        {/* Status Filter Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-          <Filter className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 mr-1 shrink-0 hidden sm:block" />
-          {statusOptions.map((opt) => (
+      {/* Row 2: status chips (wrap instead of a horizontal scrollbar) */}
+      <div className="px-4 md:px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1">
+          <Filter className="w-3.5 h-3.5" /> Status:
+        </span>
+        {statusOptions.map((opt) => {
+          const count = opt.value === "all" ? orders.length : orders.filter((o) => o.status === opt.value).length;
+          return (
             <button
               key={opt.value}
               onClick={() => setStatusFilter(opt.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+              aria-pressed={statusFilter === opt.value}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
                 statusFilter === opt.value
-                  ? "bg-[#142B49] text-white shadow-sm dark:bg-blue-600"
+                  ? "bg-[#039855] text-white shadow-sm dark:bg-blue-600"
                   : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
               }`}
             >
               {opt.label}
+              <span className={`ml-1 ${statusFilter === opt.value ? "opacity-80" : "text-slate-400"}`}>{count}</span>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
-      {/* Day 2: Priority filter */}
-      <div className="px-4 md:px-5 py-2.5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
+      {/* Row 3: Day 2 priority filter */}
+      <div className="px-4 md:px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
         <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1">
           <Flame className="w-3.5 h-3.5" /> Priority:
         </span>
@@ -119,7 +140,7 @@ export function OrderTable({
               onClick={() => setPriorityFilter(p)}
               className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
                 priorityFilter === p
-                  ? "bg-[#142B49] text-white shadow-sm dark:bg-blue-600"
+                  ? "bg-[#039855] text-white shadow-sm dark:bg-blue-600"
                   : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
               }`}
             >
@@ -127,20 +148,46 @@ export function OrderTable({
             </button>
           );
         })}
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-          className="ml-auto text-xs px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none"
-          aria-label="Sort orders"
-        >
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="priority">Highest priority first</option>
-        </select>
       </div>
 
+      {/* Phones: stacked cards instead of a wide table */}
+      <ul className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+        {filteredOrders.length === 0 ? (
+          <li className="py-10 text-center text-xs text-slate-400">No orders matching your criteria</li>
+        ) : (
+          filteredOrders.map((order) => {
+            const detailLink =
+              rolePrefix === "/rider" ? `/rider/deliveries/${order.id}` : `${rolePrefix}/orders/${order.id}`;
+            const priority = getOrderPriority(order);
+            return (
+              <li key={order.id} className={PRIORITY_CONFIG[priority].rowClass}>
+                <Link href={detailLink} className="block px-4 py-3.5 space-y-2 active:bg-slate-50 dark:active:bg-slate-800/50">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">#{order.id}</span>
+                    <div className="flex items-center gap-1.5">
+                      <PriorityBadge priority={priority} hideNormal />
+                      <OrderStatusBadge status={order.status} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 truncate">
+                    {order.pickupAddress.split(",")[0]} → {order.deliveryAddress.split(",")[0]}
+                  </p>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span className="flex items-center gap-1 truncate">
+                      <Bike className="w-3 h-3 text-amber-500 shrink-0" />
+                      {order.riderName || "Awaiting rider"}
+                    </span>
+                    <span className="shrink-0">{formatDateTime(order.createdAt)}</span>
+                  </div>
+                </Link>
+              </li>
+            );
+          })
+        )}
+      </ul>
+
       {/* Orders Table */}
-      <div className="overflow-x-auto">
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider text-[11px]">
             <tr>

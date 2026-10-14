@@ -17,23 +17,28 @@ import {
 import { useRouter } from "next/navigation";
 
 export default function RiderNotificationsPage() {
-  const { user } = useAuth();
+  const { user, riderWarehouseId } = useAuth();
   const router = useRouter();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
-    const unsub = notificationsService.subscribe(user.uid, user.role, (data) => {
-      setNotifications(data);
-      setLoading(false);
-    });
+    const unsub = notificationsService.subscribe(
+      user.uid,
+      user.role,
+      (data) => {
+        setNotifications(data);
+        setLoading(false);
+      },
+      riderWarehouseId
+    );
     return () => unsub();
-  }, [user]);
+  }, [user, riderWarehouseId]);
 
   const handleMarkAllRead = async () => {
     if (!user) return;
-    await notificationsService.markAllAsRead(user.uid, user.role);
+    await notificationsService.markAllAsRead(user.uid, user.role, riderWarehouseId);
   };
 
   const handleNotificationClick = async (notif: AppNotification) => {
@@ -49,7 +54,7 @@ export default function RiderNotificationsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">
             Rider Alert Center

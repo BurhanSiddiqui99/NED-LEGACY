@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatButton } from "@/components/chat/chat-button";
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { ordersService } from "@/services/orders.service";
@@ -104,14 +105,13 @@ export default function RiderMessagesHubPage() {
                 </div>
               </div>
 
-              <Link
+              <ChatButton
+                order={order}
+                riderUid={user?.uid || ""}
                 href={`/rider/messages/${order.id}`}
+                label="Open Courier Chat"
                 className="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-md shadow-teal-600/20"
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Open Courier Chat</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              />
             </div>
           ))}
         </div>

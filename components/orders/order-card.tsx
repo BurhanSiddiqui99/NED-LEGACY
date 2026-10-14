@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatButton } from "@/components/chat/chat-button";
 import React from "react";
 import { Order } from "@/types";
 import { OrderStatusBadge } from "./order-status-badge";
@@ -111,14 +112,13 @@ export function OrderCard({ order, rolePrefix = "/customer" }: OrderCardProps) {
             <Bike className="w-3.5 h-3.5 text-amber-500" />
             Rider: {order.riderName}
           </span>
-          {order.status !== "delivered" && order.status !== "cancelled" && (
-            <Link
-              href={chatLink}
-              className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-semibold text-[11px]"
-            >
-              <MessageSquare className="w-3 h-3" /> Chat
-            </Link>
-          )}
+          <ChatButton
+            order={order}
+            href={chatLink}
+            label="Chat"
+            iconClassName="w-3 h-3"
+            className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-semibold text-[11px] rounded-md px-1.5 py-0.5"
+          />
         </div>
       )}
 
@@ -126,7 +126,7 @@ export function OrderCard({ order, rolePrefix = "/customer" }: OrderCardProps) {
       <div className="pt-2 flex items-center justify-between gap-2">
         <Link
           href={detailLink}
-          className="w-full py-2 px-3 bg-slate-100 hover:bg-[#142B49] text-slate-700 hover:text-white dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-blue-600 dark:hover:text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition text-center"
+          className="w-full py-2 px-3 bg-slate-100 hover:bg-[#039855] text-slate-700 hover:text-white dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-blue-600 dark:hover:text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition text-center"
         >
           <span>View Details & Timeline</span>
           <ExternalLink className="w-3.5 h-3.5" />

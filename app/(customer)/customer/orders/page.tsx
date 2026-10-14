@@ -65,7 +65,7 @@ export default function CustomerOrdersPage() {
 
           <Link
             href="/customer/create-order"
-            className="py-2 px-3.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
+            className="py-2 px-3.5 bg-[#12B76A] hover:bg-[#039855] text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
           >
             <PackagePlus className="w-4 h-4" />
             <span>Create Order</span>

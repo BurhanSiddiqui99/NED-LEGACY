@@ -12,6 +12,7 @@ import { MockStore } from "./mock-store";
 import { AppUser, Rider, UserRole } from "@/types";
 
 import { getFriendlyErrorMessage } from "./errors";
+import { getWarehouse } from "@/lib/logistics";
 
 export interface RegisterCustomerData {
   fullName: string;
@@ -29,6 +30,8 @@ export interface RegisterRiderData {
   role?: UserRole;
   vehicleType: string;
   vehicleNumber: string;
+  // Warehouse id of the rider's home city (see WAREHOUSES in lib/logistics)
+  warehouseId: string;
 }
 
 export async function registerCustomer(data: RegisterCustomerData): Promise<AppUser> {
@@ -105,6 +108,11 @@ export async function registerCustomer(data: RegisterCustomerData): Promise<AppU
 }
 
 export async function registerRider(data: RegisterRiderData): Promise<{ user: AppUser; rider: Rider }> {
+  const homeWarehouse = getWarehouse(data.warehouseId);
+  if (!homeWarehouse) {
+    throw new Error("Please select the city you will deliver in.");
+  }
+
   const assignedRole: UserRole = data.role || "rider";
 
   if (isFirebaseConfigured && auth && db) {
@@ -145,12 +153,12 @@ export async function registerRider(data: RegisterRiderData): Promise<{ user: Ap
         phone: data.phone,
         vehicleType: data.vehicleType,
         vehicleNumber: data.vehicleNumber,
+        city: homeWarehouse.city,
+        warehouseId: homeWarehouse.id,
         isAvailable: true,
         isVerified: false,
-        currentLocation: {
-          latitude: 24.8532, // Default Saddar
-          longitude: 67.0167,
-        },
+        // Start at the home city hub until the rider shares GPS
+        currentLocation: { latitude: homeWarehouse.latitude, longitude: homeWarehouse.longitude },
         completedDeliveries: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -177,6 +185,8 @@ export async function registerRider(data: RegisterRiderData): Promise<{ user: Ap
         role: assignedRole,
         vehicleType: riderProfile.vehicleType,
         vehicleNumber: riderProfile.vehicleNumber,
+        city: riderProfile.city,
+        warehouseId: riderProfile.warehouseId,
         isAvailable: riderProfile.isAvailable,
         isVerified: riderProfile.isVerified,
         currentLocation: riderProfile.currentLocation,
@@ -214,12 +224,11 @@ export async function registerRider(data: RegisterRiderData): Promise<{ user: Ap
     phone: data.phone,
     vehicleType: data.vehicleType,
     vehicleNumber: data.vehicleNumber,
+    city: homeWarehouse.city,
+    warehouseId: homeWarehouse.id,
     isAvailable: true,
     isVerified: true,
-    currentLocation: {
-      latitude: 24.9322, // NED University
-      longitude: 67.1128,
-    },
+    currentLocation: { latitude: homeWarehouse.latitude, longitude: homeWarehouse.longitude },
     completedDeliveries: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

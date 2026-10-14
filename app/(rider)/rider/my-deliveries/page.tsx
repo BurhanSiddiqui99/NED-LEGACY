@@ -1,11 +1,13 @@
 "use client";
 
+import { ChatButton } from "@/components/chat/chat-button";
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { ordersService } from "@/services/orders.service";
 import { Order } from "@/types";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { DeliveryStatusActions } from "@/components/rider/delivery-status-actions";
+import { isActiveStatus } from "@/lib/logistics";
 import { formatDateTime, formatPKR } from "@/lib/utils";
 import {
   Package,
@@ -33,10 +35,10 @@ export default function MyDeliveriesPage() {
     return () => unsub();
   }, [user]);
 
-  const activeOrders = orders.filter(
-    (o) => o.status === "accepted" || o.status === "picked_up" || o.status === "in_transit"
-  );
-  const completedOrders = orders.filter((o) => o.status === "delivered");
+  // Active = this rider currently holds the parcel. Completed = delivered, or this rider's
+  // first-mile leg ended at the origin warehouse.
+  const activeOrders = orders.filter((o) => o.riderId === user?.uid && isActiveStatus(o.status));
+  const completedOrders = orders.filter((o) => !activeOrders.includes(o) && o.status !== "cancelled" && o.status !== "pending");
 
   const displayOrders = activeTab === "active" ? activeOrders : completedOrders;
 
@@ -94,7 +96,7 @@ export default function MyDeliveriesPage() {
           {activeTab === "active" && (
             <Link
               href="/rider/available-orders"
-              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#2563EB] text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20"
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#12B76A] text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20"
             >
               <span>Explore Available Orders</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -161,15 +163,14 @@ export default function MyDeliveriesPage() {
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
                     <span>Sender: {order.customerName || "Customer"}</span>
-                    {order.status !== "delivered" && (
-                      <Link
-                        href={`/rider/messages/${order.id}`}
-                        className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-semibold"
-                      >
-                        <MessageSquare className="w-3 h-3" />
-                        <span>Chat with Sender</span>
-                      </Link>
-                    )}
+                    <ChatButton
+                      order={order}
+                      riderUid={user?.uid || ""}
+                      href={`/rider/messages/${order.id}`}
+                      label="Chat with Sender"
+                      iconClassName="w-3 h-3"
+                      className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-semibold rounded-md px-1.5 py-0.5"
+                    />
                   </div>
                 </div>
               </div>

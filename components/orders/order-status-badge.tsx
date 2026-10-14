@@ -10,6 +10,8 @@ import {
   Truck,
   BadgeCheck,
   XCircle,
+  Warehouse,
+  Bike,
 } from "lucide-react";
 
 interface OrderStatusBadgeProps {
@@ -35,6 +37,14 @@ export function OrderStatusBadge({
         return <PackageCheck className="w-3.5 h-3.5 text-purple-600" />;
       case "in_transit":
         return <Truck className="w-3.5 h-3.5 text-teal-600" />;
+      case "at_origin_warehouse":
+      case "at_destination_warehouse":
+        return <Warehouse className="w-3.5 h-3.5" />;
+      case "linehaul":
+      case "out_for_delivery":
+        return <Truck className="w-3.5 h-3.5" />;
+      case "last_mile_accepted":
+        return <Bike className="w-3.5 h-3.5" />;
       case "delivered":
         return <BadgeCheck className="w-3.5 h-3.5 text-emerald-600" />;
       case "cancelled":

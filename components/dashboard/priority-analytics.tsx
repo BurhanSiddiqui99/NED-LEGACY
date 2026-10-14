@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import Link from "next/link";
 import { Order, OrderPriority } from "@/types";
 import { PRIORITY_CONFIG, PRIORITY_LEVELS, getOrderPriority } from "@/constants";
+import { isActiveStatus } from "@/lib/logistics";
 import { AlertTriangle, Flame, Minus } from "lucide-react";
 
 interface PriorityAnalyticsProps {
@@ -48,7 +49,7 @@ export function PriorityAnalytics({ orders }: PriorityAnalyticsProps) {
       const p = getOrderPriority(o);
       result[p].total++;
       if (o.status === "pending") result[p].waiting++;
-      if (o.status === "accepted" || o.status === "picked_up" || o.status === "in_transit") result[p].active++;
+      if (isActiveStatus(o.status)) result[p].active++;
     });
     return result;
   }, [orders]);

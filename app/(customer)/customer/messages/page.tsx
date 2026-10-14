@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatButton } from "@/components/chat/chat-button";
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { ordersService } from "@/services/orders.service";
@@ -85,7 +86,7 @@ export default function CustomerMessagesHubPage() {
                         #{order.id}
                       </span>
                       <p className="text-[11px] text-slate-500 font-medium">
-                        {order.riderName || "Support Dispatch (Pending Rider)"}
+                        {order.riderId ? order.riderName : "Waiting for a rider"}
                       </p>
                     </div>
                   </div>
@@ -103,14 +104,12 @@ export default function CustomerMessagesHubPage() {
                 </div>
               </div>
 
-              <Link
+              <ChatButton
+                order={order}
                 href={`/customer/messages/${order.id}`}
-                className="w-full py-2.5 px-4 bg-gradient-to-r from-[#142B49] to-[#2563EB] hover:opacity-95 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-md shadow-blue-500/20"
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Open Real-Time Chat</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+                label="Open Real-Time Chat"
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-[#039855] to-[#12B76A] hover:opacity-95 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-md shadow-blue-500/20"
+              />
             </div>
           ))}
         </div>

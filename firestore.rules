@@ -60,9 +60,14 @@ service cloud.firestore {
       // Registered rider can create and update their location, availability and delivery counter
       allow create: if isOwner(riderId);
       allow update: if isOwner(riderId) &&
-        changedKeys().hasOnly(['currentLocation', 'isAvailable', 'updatedAt', 'completedDeliveries']) &&
+        changedKeys().hasOnly(['currentLocation', 'isAvailable', 'updatedAt', 'completedDeliveries', 'city', 'warehouseId']) &&
         (!('completedDeliveries' in changedKeys()) ||
           request.resource.data.completedDeliveries == resource.data.completedDeliveries + 1);
+
+      // When a customer completes a step with the rider's OTP, they bump that rider's job count by exactly one
+      allow update: if isAuthenticated() &&
+        changedKeys().hasOnly(['completedDeliveries', 'updatedAt']) &&
+        request.resource.data.completedDeliveries == resource.data.get('completedDeliveries', 0) + 1;
 
       // Only admins can update verification status
       allow update, delete: if isAdmin();
@@ -70,12 +75,40 @@ service cloud.firestore {
 
     // Orders collection
     match /orders/{orderId} {
-      // Customers can read their own orders, riders can read pending or assigned orders, admins can read all
+      function claimable(data) {
+        return data.status in ['pending', 'at_destination_warehouse'] && data.riderId == null;
+      }
+      function unchanged(field) {
+        return request.resource.data.get(field, null) == resource.data.get(field, null);
+      }
+      function isIntercity() {
+        return resource.data.get('deliveryType', 'intracity') == 'intercity';
+      }
+      // Next step a rider may take; OTP checks run server-side (/api/otp/verify) before the client writes
+      function validRiderStep(from, to) {
+        return (from == 'accepted' && to == 'picked_up') ||
+          (from == 'picked_up' && to == 'in_transit') ||
+          (from == 'in_transit' && to == 'delivered' && !isIntercity()) ||
+          (from == 'in_transit' && to == 'at_origin_warehouse' && isIntercity()) ||
+          (from == 'last_mile_accepted' && to == 'out_for_delivery') ||
+          (from == 'out_for_delivery' && to == 'delivered');
+      }
+
+      // Steps a customer completes by entering the rider's OTP
+      function validCustomerStep(from, to) {
+        return (from == 'accepted' && to == 'picked_up') ||
+          (from == 'in_transit' && to == 'delivered' && !isIntercity()) ||
+          (from == 'in_transit' && to == 'at_origin_warehouse' && isIntercity()) ||
+          (from == 'out_for_delivery' && to == 'delivered');
+      }
+
+      // Customers read their own orders, riders read open orders and any order they have carried, admins read all
       allow read: if isAuthenticated() && (
         isAdmin() ||
         resource.data.customerId == request.auth.uid ||
         resource.data.riderId == request.auth.uid ||
-        (isRider() && resource.data.status == 'pending' && resource.data.riderId == null)
+        request.auth.uid in resource.data.get('riderIds', []) ||
+        (isRider() && claimable(resource.data))
       );
 
       // Customers can create orders only for themselves with pending status and a valid priority
@@ -85,44 +118,65 @@ service cloud.firestore {
         request.resource.data.riderId == null &&
         validPriority(request.resource.data);
 
-      // Order update conditions:
-      // 1. Rider accepting pending order
-      // 2. Assigned rider advancing status (accepted -> picked_up -> in_transit -> delivered)
-      // 3. Assigned rider streaming live GPS location
-      // 4. Customer cancelling their pending order
-      // 5. Admin full control (incl. priority escalation)
       allow update: if isAuthenticated() && (
+        // Admin: full control (priority escalation, warehouse dispatch / arrival)
         (isAdmin() && validPriority(request.resource.data)) ||
-        // Rider accepts order: order must be pending, riderId becomes request.auth.uid, status becomes accepted
+        // Rider claims an open order (first mile from pending, last mile from the destination warehouse)
         (
           isRider() &&
-          resource.data.status == 'pending' &&
-          resource.data.riderId == null &&
+          claimable(resource.data) &&
           request.resource.data.riderId == request.auth.uid &&
-          request.resource.data.status == 'accepted' &&
-          request.resource.data.get('priority', 'normal') == resource.data.get('priority', 'normal')
+          request.resource.data.status == (resource.data.status == 'pending' ? 'accepted' : 'last_mile_accepted') &&
+          unchanged('priority') && unchanged('customerId') && unchanged('price') && unchanged('deliveryType')
         ) ||
-        // Assigned rider updating progress (cannot touch priority, customer or price)
+        // Rider rejects an open order: only adds themselves to the rejection log
+        (
+          isRider() &&
+          claimable(resource.data) &&
+          changedKeys().hasOnly(['rejectedBy', 'rejections', 'updatedAt']) &&
+          request.auth.uid in request.resource.data.rejectedBy
+        ) ||
+        // Assigned rider stores OTP tokens / confirmations for the current checkpoint
         (
           resource.data.riderId == request.auth.uid &&
-          changedKeys().hasOnly(['status', 'updatedAt', 'deliveredAt']) && (
-            (resource.data.status == 'accepted' && request.resource.data.status == 'picked_up') ||
-            (resource.data.status == 'picked_up' && request.resource.data.status == 'in_transit') ||
-            (resource.data.status == 'in_transit' && request.resource.data.status == 'delivered')
+          changedKeys().hasOnly(['verifications', 'updatedAt'])
+        ) ||
+        // Assigned rider advances one step. The first-mile rider releases the order at the origin warehouse.
+        (
+          resource.data.riderId == request.auth.uid &&
+          changedKeys().hasOnly(['status', 'updatedAt', 'deliveredAt', 'statusHistory', 'verifications', 'riderId', 'currentRiderLocation']) &&
+          validRiderStep(resource.data.status, request.resource.data.status) &&
+          (
+            request.resource.data.riderId == resource.data.riderId ||
+            (request.resource.data.status == 'at_origin_warehouse' && request.resource.data.riderId == null)
           )
         ) ||
         // Assigned rider sharing live location
         (
           resource.data.riderId == request.auth.uid &&
-          resource.data.status in ['accepted', 'picked_up', 'in_transit'] &&
+          resource.data.status in ['accepted', 'picked_up', 'in_transit', 'last_mile_accepted', 'out_for_delivery'] &&
           changedKeys().hasOnly(['currentRiderLocation', 'riderLocationUpdatedAt'])
+        ) ||
+        // Customer confirms an OTP the rider read out. If it was the last code the step needed,
+        // the same write completes the step (pickup, warehouse drop-off or delivery).
+        (
+          resource.data.customerId == request.auth.uid &&
+          changedKeys().hasOnly(['verifications', 'updatedAt', 'status', 'statusHistory', 'deliveredAt', 'riderId', 'currentRiderLocation']) &&
+          (
+            !('status' in changedKeys()) ||
+            validCustomerStep(resource.data.status, request.resource.data.status)
+          ) &&
+          (
+            request.resource.data.riderId == resource.data.riderId ||
+            (request.resource.data.status == 'at_origin_warehouse' && request.resource.data.riderId == null)
+          )
         ) ||
         // Customer cancels their pending order
         (
           resource.data.customerId == request.auth.uid &&
           resource.data.status == 'pending' &&
           request.resource.data.status == 'cancelled' &&
-          changedKeys().hasOnly(['status', 'updatedAt'])
+          changedKeys().hasOnly(['status', 'updatedAt', 'statusHistory'])
         )
       );
 
@@ -135,13 +189,25 @@ service cloud.firestore {
           return get(/databases/$(database)/documents/orders/$(orderId)).data;
         }
         function isParticipant() {
-          return order().customerId == request.auth.uid || order().riderId == request.auth.uid;
+          return order().customerId == request.auth.uid ||
+            order().riderId == request.auth.uid ||
+            request.auth.uid in order().get('riderIds', []);
         }
 
         allow read: if isAuthenticated() && (isAdmin() || isParticipant());
 
+        // Posting needs an open chat: a rider holds the order and it is not cancelled or delivered.
+        // Only the customer and the rider currently holding the order can post (earlier riders can read).
+        function chatOpen() {
+          return order().riderId != null && !(order().status in ['cancelled', 'delivered']);
+        }
+        function canPost() {
+          return order().customerId == request.auth.uid || order().riderId == request.auth.uid;
+        }
+
         allow create: if isAuthenticated() &&
-          (isAdmin() || isParticipant()) &&
+          chatOpen() &&
+          (isAdmin() || canPost()) &&
           request.resource.data.senderId == request.auth.uid &&
           request.resource.data.orderId == orderId &&
           request.resource.data.text is string &&
@@ -159,6 +225,8 @@ service cloud.firestore {
         return inbox == request.auth.uid ||
           inbox == 'all' ||
           (inbox == 'riders' && isRider()) ||
+          // Per-city rider inbox, e.g. 'riders-wh-karachi'
+          (inbox.matches('riders-.*') && isRider()) ||
           isAdmin();
       }
 

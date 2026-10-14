@@ -1,5 +1,6 @@
 "use client";
 
+import { RiderCityCard } from "@/components/rider/rider-city-card";
 import React from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { formatDateTime } from "@/lib/utils";
@@ -34,7 +35,7 @@ export default function RiderProfilePage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#142B49] via-[#2563EB] to-[#0D9488] text-white flex items-center justify-center font-bold text-2xl shadow-lg shadow-blue-500/20">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#027A48] via-[#039855] to-[#12B76A] text-white flex items-center justify-center font-bold text-2xl shadow-lg shadow-blue-500/20">
               <Bike className="w-8 h-8" />
             </div>
             <div>
@@ -65,6 +66,8 @@ export default function RiderProfilePage() {
           </button>
         </div>
 
+        <RiderCityCard />
+
         {/* Stats and Vehicle Specs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
@@ -77,6 +80,7 @@ export default function RiderProfilePage() {
             <span className="text-[11px] font-mono text-slate-400 block mt-0.5">
               Plate: {riderProfile?.vehicleNumber || "KHI-KAS-4821"}
             </span>
+
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">

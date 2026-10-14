@@ -7,12 +7,25 @@ import {
   subscribeToRiderOrders,
   subscribeToAllOrders,
   acceptOrder,
-  updateOrderStatus,
+  rejectOrder,
+  advanceOrder,
   cancelOrder,
   updateOrderPriority,
   updateRiderLiveLocation,
+  recordOtpChallenge,
+  recordVerification,
 } from "@/lib/firebase/firestore";
-import { GeoLocation, Order, OrderPriority, OrderStatus, Rider } from "@/types";
+import {
+  GeoLocation,
+  Order,
+  OrderPriority,
+  OrderStatus,
+  OtpChallenge,
+  Rider,
+  UserRole,
+  VerificationCheckpoint,
+  VerificationParty,
+} from "@/types";
 
 export const ordersService = {
   async create(orderData: Omit<Order, "id" | "status" | "createdAt" | "updatedAt" | "riderId">) {
@@ -47,8 +60,12 @@ export const ordersService = {
     return acceptOrder(orderId, rider);
   },
 
-  async updateStatus(orderId: string, newStatus: OrderStatus, actorRiderId?: string) {
-    return updateOrderStatus(orderId, newStatus, actorRiderId);
+  async reject(orderId: string, rider: Rider, reason: string) {
+    return rejectOrder(orderId, rider, reason);
+  },
+
+  async advance(orderId: string, to: OrderStatus, actor: { uid: string; role: UserRole | null; name?: string }) {
+    return advanceOrder(orderId, to, actor);
   },
 
   async cancel(orderId: string, actorId: string) {
@@ -61,5 +78,23 @@ export const ordersService = {
 
   async updateLiveLocation(orderId: string, riderId: string, location: GeoLocation) {
     return updateRiderLiveLocation(orderId, riderId, location);
+  },
+
+  async recordOtpChallenge(
+    orderId: string,
+    checkpoint: VerificationCheckpoint,
+    party: VerificationParty,
+    challenge: OtpChallenge
+  ) {
+    return recordOtpChallenge(orderId, checkpoint, party, challenge);
+  },
+
+  async recordVerification(
+    orderId: string,
+    checkpoint: VerificationCheckpoint,
+    party: VerificationParty,
+    actorUid: string
+  ) {
+    return recordVerification(orderId, checkpoint, party, actorUid);
   },
 };

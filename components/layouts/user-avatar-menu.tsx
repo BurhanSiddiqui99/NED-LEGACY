@@ -34,7 +34,7 @@ export function UserAvatarMenu() {
     return (
       <Link
         href="/login"
-        className="px-4 py-2 text-sm font-medium text-white bg-[#142B49] hover:bg-[#0f2138] rounded-xl transition shadow-sm"
+        className="px-4 py-2 text-sm font-medium text-white bg-[#039855] hover:bg-[#027A48] rounded-xl transition shadow-sm"
       >
         Sign In
       </Link>
@@ -67,8 +67,9 @@ export function UserAvatarMenu() {
 
   const handleLogout = async () => {
     setOpen(false);
+    // Leave the protected area first so its listeners unmount, then sign out
+    router.replace("/login");
     await logout();
-    router.push("/login");
   };
 
   const getProfileLink = () => {
@@ -83,7 +84,7 @@ export function UserAvatarMenu() {
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none"
       >
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#142B49] to-[#2563EB] text-white flex items-center justify-center font-bold text-sm shadow-sm ring-2 ring-white dark:ring-slate-900">
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#039855] to-[#12B76A] text-white flex items-center justify-center font-bold text-sm shadow-sm ring-2 ring-white dark:ring-slate-900">
           {user.fullName ? user.fullName.charAt(0).toUpperCase() : "U"}
         </div>
         <div className="hidden md:flex flex-col text-left">
