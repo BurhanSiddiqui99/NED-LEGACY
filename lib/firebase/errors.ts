@@ -40,7 +40,7 @@ export function getFriendlyErrorMessage(error: any): string {
 
   // 2. Cloud Firestore Errors
   if (code.includes("permission-denied") || rawMessage.toLowerCase().includes("permission-denied")) {
-    return "Database Permission Denied: Your Firestore security rules prevented writing this record. Please check firestore.rules.";
+    return "Firebase Firestore Permission Denied: Your database rules in Firebase Console are blocking writes. Please go to Firebase Console > Firestore Database > Rules and publish rules allowing read/write access.";
   }
   if (code.includes("unavailable") || rawMessage.toLowerCase().includes("unavailable")) {
     return "Firebase Database is currently unreachable. Please check your connection.";

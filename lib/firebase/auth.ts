@@ -36,8 +36,24 @@ export async function registerCustomer(data: RegisterCustomerData): Promise<AppU
 
   if (isFirebaseConfigured && auth && db) {
     try {
-      const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      const uid = cred.user.uid;
+      let uid: string;
+
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
+        uid = cred.user.uid;
+      } catch (authErr: any) {
+        // If email was already registered in Auth (e.g. from a prior attempt when Firestore rules failed)
+        if (authErr?.code === "auth/email-already-in-use") {
+          try {
+            const existingCred = await signInWithEmailAndPassword(auth, data.email, data.password);
+            uid = existingCred.user.uid;
+          } catch {
+            throw authErr;
+          }
+        } else {
+          throw authErr;
+        }
+      }
 
       const userProfile: AppUser = {
         uid,
@@ -93,8 +109,23 @@ export async function registerRider(data: RegisterRiderData): Promise<{ user: Ap
 
   if (isFirebaseConfigured && auth && db) {
     try {
-      const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      const uid = cred.user.uid;
+      let uid: string;
+
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
+        uid = cred.user.uid;
+      } catch (authErr: any) {
+        if (authErr?.code === "auth/email-already-in-use") {
+          try {
+            const existingCred = await signInWithEmailAndPassword(auth, data.email, data.password);
+            uid = existingCred.user.uid;
+          } catch {
+            throw authErr;
+          }
+        } else {
+          throw authErr;
+        }
+      }
 
       const userProfile: AppUser = {
         uid,
@@ -207,10 +238,41 @@ export async function loginUser(email: string, password?: string): Promise<AppUs
   if (isFirebaseConfigured && auth && db) {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password || "");
-      const userDoc = await getDoc(doc(db, "users", cred.user.uid));
+      const userDocRef = doc(db, "users", cred.user.uid);
+      const userDoc = await getDoc(userDocRef);
+
       if (!userDoc.exists()) {
-        throw new Error("User record not found in Firestore database. Please register first.");
+        // Auto-heal missing Firestore document if user was registered in Auth but missed in DB
+        const isRiderEmail = lowerEmail.includes("rider");
+        const isAdminEmail = lowerEmail.includes("admin");
+        const resolvedRole: UserRole = isAdminEmail ? "admin" : isRiderEmail ? "rider" : "customer";
+
+        const restoredUser: AppUser = {
+          uid: cred.user.uid,
+          fullName: cred.user.displayName || email.split("@")[0],
+          email: cred.user.email || email,
+          phone: cred.user.phoneNumber || "+92 300 0000000",
+          role: resolvedRole,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        try {
+          await setDoc(userDocRef, {
+            ...restoredUser,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        } catch (dbErr) {
+          console.warn("Could not auto-write Firestore document (check Firestore security rules):", dbErr);
+        }
+
+        MockStore.saveUser(restoredUser);
+        MockStore.setCurrentUser(restoredUser);
+        return restoredUser;
       }
+
       const data = userDoc.data() as AppUser;
       MockStore.setCurrentUser(data);
       return data;
