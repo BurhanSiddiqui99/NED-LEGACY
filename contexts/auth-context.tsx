@@ -151,6 +151,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setRiderProfile(null);
       toast.success("Account registered successfully!");
       return newUser;
+    } catch (error: any) {
+      toast.error(error.message || "Failed to register account");
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -164,6 +167,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setRiderProfile(res.rider);
       toast.success("Rider partner account registered successfully!");
       return res;
+    } catch (error: any) {
+      toast.error(error.message || "Failed to register rider account");
+      throw error;
     } finally {
       setLoading(false);
     }

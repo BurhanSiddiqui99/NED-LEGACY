@@ -11,11 +11,14 @@ import { auth, db, isFirebaseConfigured } from "./config";
 import { MockStore } from "./mock-store";
 import { AppUser, Rider, UserRole } from "@/types";
 
+import { getFriendlyErrorMessage } from "./errors";
+
 export interface RegisterCustomerData {
   fullName: string;
   email: string;
   password: string;
   phone: string;
+  role?: UserRole;
 }
 
 export interface RegisterRiderData {
@@ -23,28 +26,49 @@ export interface RegisterRiderData {
   email: string;
   password: string;
   phone: string;
+  role?: UserRole;
   vehicleType: string;
   vehicleNumber: string;
 }
 
 export async function registerCustomer(data: RegisterCustomerData): Promise<AppUser> {
+  const assignedRole: UserRole = data.role || "customer";
+
   if (isFirebaseConfigured && auth && db) {
-    const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
-    const uid = cred.user.uid;
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const uid = cred.user.uid;
 
-    const userProfile: AppUser = {
-      uid,
-      fullName: data.fullName,
-      email: data.email,
-      phone: data.phone,
-      role: "customer",
-      createdAt: serverTimestamp() as any,
-      updatedAt: serverTimestamp() as any,
-      isActive: true,
-    };
+      const userProfile: AppUser = {
+        uid,
+        fullName: data.fullName,
+        email: data.email,
+        phone: data.phone,
+        role: assignedRole,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isActive: true,
+      };
 
-    await setDoc(doc(db, "users", uid), userProfile);
-    return userProfile;
+      // Store user record and role directly in Firestore database
+      await setDoc(doc(db, "users", uid), {
+        uid: userProfile.uid,
+        fullName: userProfile.fullName,
+        email: userProfile.email,
+        phone: userProfile.phone,
+        role: assignedRole,
+        isActive: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      MockStore.saveUser(userProfile);
+      MockStore.setCurrentUser(userProfile);
+      return userProfile;
+    } catch (err: any) {
+      const friendly = getFriendlyErrorMessage(err);
+      throw new Error(friendly);
+    }
   }
 
   // Demo / local mode
@@ -54,7 +78,7 @@ export async function registerCustomer(data: RegisterCustomerData): Promise<AppU
     fullName: data.fullName,
     email: data.email,
     phone: data.phone,
-    role: "customer",
+    role: assignedRole,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     isActive: true,
@@ -65,42 +89,79 @@ export async function registerCustomer(data: RegisterCustomerData): Promise<AppU
 }
 
 export async function registerRider(data: RegisterRiderData): Promise<{ user: AppUser; rider: Rider }> {
+  const assignedRole: UserRole = data.role || "rider";
+
   if (isFirebaseConfigured && auth && db) {
-    const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
-    const uid = cred.user.uid;
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const uid = cred.user.uid;
 
-    const userProfile: AppUser = {
-      uid,
-      fullName: data.fullName,
-      email: data.email,
-      phone: data.phone,
-      role: "rider",
-      createdAt: serverTimestamp() as any,
-      updatedAt: serverTimestamp() as any,
-      isActive: true,
-    };
+      const userProfile: AppUser = {
+        uid,
+        fullName: data.fullName,
+        email: data.email,
+        phone: data.phone,
+        role: assignedRole,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isActive: true,
+      };
 
-    const riderProfile: Rider = {
-      uid,
-      fullName: data.fullName,
-      email: data.email,
-      phone: data.phone,
-      vehicleType: data.vehicleType,
-      vehicleNumber: data.vehicleNumber,
-      isAvailable: true,
-      isVerified: false,
-      currentLocation: {
-        latitude: 24.8532, // Default Saddar
-        longitude: 67.0167,
-      },
-      completedDeliveries: 0,
-      createdAt: serverTimestamp() as any,
-      updatedAt: serverTimestamp() as any,
-    };
+      const riderProfile: Rider = {
+        uid,
+        fullName: data.fullName,
+        email: data.email,
+        phone: data.phone,
+        vehicleType: data.vehicleType,
+        vehicleNumber: data.vehicleNumber,
+        isAvailable: true,
+        isVerified: false,
+        currentLocation: {
+          latitude: 24.8532, // Default Saddar
+          longitude: 67.0167,
+        },
+        completedDeliveries: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-    await setDoc(doc(db, "users", uid), userProfile);
-    await setDoc(doc(db, "riders", uid), riderProfile);
-    return { user: userProfile, rider: riderProfile };
+      // Store in Firestore users collection with assigned role
+      await setDoc(doc(db, "users", uid), {
+        uid: userProfile.uid,
+        fullName: userProfile.fullName,
+        email: userProfile.email,
+        phone: userProfile.phone,
+        role: assignedRole,
+        isActive: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // Store in Firestore riders collection
+      await setDoc(doc(db, "riders", uid), {
+        uid: riderProfile.uid,
+        fullName: riderProfile.fullName,
+        email: riderProfile.email,
+        phone: riderProfile.phone,
+        role: assignedRole,
+        vehicleType: riderProfile.vehicleType,
+        vehicleNumber: riderProfile.vehicleNumber,
+        isAvailable: riderProfile.isAvailable,
+        isVerified: riderProfile.isVerified,
+        currentLocation: riderProfile.currentLocation,
+        completedDeliveries: riderProfile.completedDeliveries,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      MockStore.saveUser(userProfile);
+      MockStore.saveRider(riderProfile);
+      MockStore.setCurrentUser(userProfile);
+      return { user: userProfile, rider: riderProfile };
+    } catch (err: any) {
+      const friendly = getFriendlyErrorMessage(err);
+      throw new Error(friendly);
+    }
   }
 
   // Demo / local mode
@@ -110,7 +171,7 @@ export async function registerRider(data: RegisterRiderData): Promise<{ user: Ap
     fullName: data.fullName,
     email: data.email,
     phone: data.phone,
-    role: "rider",
+    role: assignedRole,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     isActive: true,
@@ -144,14 +205,19 @@ export async function loginUser(email: string, password?: string): Promise<AppUs
 
   // If Firebase is configured with real credentials, perform real Firebase Auth
   if (isFirebaseConfigured && auth && db) {
-    const cred = await signInWithEmailAndPassword(auth, email, password || "");
-    const userDoc = await getDoc(doc(db, "users", cred.user.uid));
-    if (!userDoc.exists()) {
-      throw new Error("User record not found in Firestore database.");
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password || "");
+      const userDoc = await getDoc(doc(db, "users", cred.user.uid));
+      if (!userDoc.exists()) {
+        throw new Error("User record not found in Firestore database. Please register first.");
+      }
+      const data = userDoc.data() as AppUser;
+      MockStore.setCurrentUser(data);
+      return data;
+    } catch (err: any) {
+      const friendly = getFriendlyErrorMessage(err);
+      throw new Error(friendly);
     }
-    const data = userDoc.data() as AppUser;
-    MockStore.setCurrentUser(data);
-    return data;
   }
 
   // Fallback for offline/local mode when Firebase keys have not yet been provided
@@ -177,8 +243,13 @@ export async function logoutUser(): Promise<void> {
 
 export async function resetPassword(email: string): Promise<void> {
   if (isFirebaseConfigured && auth) {
-    await sendPasswordResetEmail(auth, email);
-    return;
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return;
+    } catch (err: any) {
+      const friendly = getFriendlyErrorMessage(err);
+      throw new Error(friendly);
+    }
   }
   // Mock mode
   const user = MockStore.getUsers().find((u) => u.email.toLowerCase() === email.toLowerCase());
