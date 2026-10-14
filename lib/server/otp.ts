@@ -65,6 +65,11 @@ export function canSend(key: string, cooldownMs = 30_000): boolean {
   return true;
 }
 
+/** Lifts the cooldown again, e.g. when the email could not be sent. */
+export function clearSend(key: string): void {
+  lastSend.delete(key);
+}
+
 export function registerAttempt(token: string, max = 5): boolean {
   const n = (attempts.get(token) || 0) + 1;
   attempts.set(token, n);

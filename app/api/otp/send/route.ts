@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canSend, issueOtp, maskEmail } from "@/lib/server/otp";
+import { canSend, clearSend, issueOtp, maskEmail } from "@/lib/server/otp";
 import { isMailConfigured, sendOtpEmail } from "@/lib/server/mailer";
 
 export const runtime = "nodejs";
@@ -48,18 +48,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Your account has no valid email address." }, { status: 400 });
   }
 
-  if (!canSend(`${orderId}:${checkpoint}:${party}`)) {
-    return NextResponse.json({ error: "A code was just sent. Please wait 30 seconds before resending." }, { status: 429 });
+  // Config errors must not start the resend cooldown, or every retry would show "wait 30 seconds"
+  const mailReady = isMailConfigured();
+  if (!mailReady && process.env.NODE_ENV === "production" && process.env.OTP_DEMO_MODE !== "true") {
+    console.error("OTP send: SMTP_HOST / SMTP_USER / SMTP_PASS are not set on this deployment.");
+    return NextResponse.json({ error: "Email service is not configured on the server." }, { status: 503 });
+  }
+
+  const cooldownKey = `${orderId}:${checkpoint}:${party}`;
+  if (!canSend(cooldownKey)) {
+    return NextResponse.json(
+      { error: "A code was just sent. Please wait 30 seconds before resending." },
+      { status: 429, headers: { "Retry-After": "30" } }
+    );
   }
 
   const { code, token, expiresAt } = issueOtp(orderId, checkpoint, party);
   const sentTo = maskEmail(email);
 
-  if (!isMailConfigured()) {
+  if (!mailReady) {
     // Local demo without SMTP: hand the code back so the flow can still be tested.
-    if (process.env.NODE_ENV === "production" && process.env.OTP_DEMO_MODE !== "true") {
-      return NextResponse.json({ error: "Email service is not configured." }, { status: 500 });
-    }
     console.info(`[OTP demo] ${checkpoint}/${party} for #${orderId}: ${code}`);
     return NextResponse.json({ token, expiresAt, sentTo, demoCode: code });
   }
@@ -74,6 +82,7 @@ export async function POST(req: Request) {
     });
   } catch (err: any) {
     console.error("OTP email failed:", err);
+    clearSend(cooldownKey); // nothing was sent, so let the rider retry straight away
     return NextResponse.json({ error: "Could not send the verification email. Try again." }, { status: 502 });
   }
 

@@ -63,6 +63,20 @@ export function DeliveryStatusActions({ order, riderUid, onStatusUpdated }: Deli
   const { user, role } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [demoCodes, setDemoCodes] = useState<Partial<Record<VerificationParty, string>>>({});
+  // Seconds left before each party's code can be resent (server allows one send per 30 s)
+  const [resendIn, setResendIn] = useState<Partial<Record<VerificationParty, number>>>({});
+  const cooling = Object.values(resendIn).some((n) => (n || 0) > 0);
+  useEffect(() => {
+    if (!cooling) return;
+    const id = setInterval(
+      () =>
+        setResendIn((r) =>
+          Object.fromEntries(Object.entries(r).map(([k, n]) => [k, Math.max(0, (n || 0) - 1)]))
+        ),
+      1000
+    );
+    return () => clearInterval(id);
+  }, [cooling]);
   const [moment, setMoment] = useState<{ variant: ParcelSceneVariant; title: string; message: string } | null>(null);
 
   // Celebrate every step change, including ones completed by the customer / admin entering the OTP
@@ -135,6 +149,7 @@ export function DeliveryStatusActions({ order, riderUid, onStatusUpdated }: Deli
     setBusy(`send-${party}`);
     try {
       const { sentTo, demoCode } = await verificationService.sendCode(order, checkpoint, party, user.email);
+      setResendIn((r) => ({ ...r, [party]: 30 }));
       if (demoCode) {
         setDemoCodes((d) => ({ ...d, [party]: demoCode }));
         toast.warning(`Email not configured. Demo code for ${PARTY_LABEL[party].toLowerCase()}: ${demoCode}`, {
@@ -144,7 +159,13 @@ export function DeliveryStatusActions({ order, riderUid, onStatusUpdated }: Deli
         toast.success(`Code sent to your email (${sentTo}). Read it to the ${PARTY_LABEL[party].toLowerCase()}.`);
       }
     } catch (err: any) {
-      toast.error(err.message);
+      // Already sent moments ago (e.g. a double tap): show the countdown instead of an error
+      if (/wait 30 seconds/i.test(err.message)) {
+        setResendIn((r) => ({ ...r, [party]: 30 }));
+        toast.info("Code already sent. Check your email; you can resend in 30 seconds.");
+      } else {
+        toast.error(err.message);
+      }
     } finally {
       setBusy(null);
     }
@@ -216,11 +237,15 @@ export function DeliveryStatusActions({ order, riderUid, onStatusUpdated }: Deli
                     <button
                       type="button"
                       onClick={() => sendCode(party)}
-                      disabled={!!busy}
+                      disabled={!!busy || (resendIn[party] || 0) > 0}
                       className="py-2 px-3 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       {busy === `send-${party}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
-                      {challenge ? "Resend to my email" : "Email me the code"}
+                      {(resendIn[party] || 0) > 0
+                        ? `Resend in ${resendIn[party]}s`
+                        : challenge
+                        ? "Resend to my email"
+                        : "Email me the code"}
                     </button>
                     {challenge && (
                       <span className="text-[11px] text-slate-500 flex items-center gap-1">
