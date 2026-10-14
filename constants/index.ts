@@ -1,0 +1,188 @@
+import { KarachiLocationPreset, OrderStatus, UserRole } from "@/types";
+
+export const KARACHI_LOCATIONS: KarachiLocationPreset[] = [
+  {
+    id: "ned-uni",
+    name: "NED University of Engineering & Tech",
+    address: "Main University Road, Block 1, Gulshan-e-Iqbal, Karachi",
+    latitude: 24.9322,
+    longitude: 67.1128,
+    area: "Gulshan-e-Iqbal",
+  },
+  {
+    id: "saddar",
+    name: "Saddar Downtown & Electronics Market",
+    address: "Abdullah Haroon Road, Saddar, Karachi",
+    latitude: 24.8532,
+    longitude: 67.0167,
+    area: "Saddar",
+  },
+  {
+    id: "clifton",
+    name: "Clifton Block 4 & Sea View",
+    address: "Clifton Beach Avenue, Block 4, Clifton, Karachi",
+    latitude: 24.8138,
+    longitude: 67.0299,
+    area: "Clifton",
+  },
+  {
+    id: "gulshan",
+    name: "Gulshan-e-Iqbal Block 13-D",
+    address: "University Road opposite Expo Centre, Gulshan-e-Iqbal, Karachi",
+    latitude: 24.9207,
+    longitude: 67.0982,
+    area: "Gulshan-e-Iqbal",
+  },
+  {
+    id: "north-nazimabad",
+    name: "North Nazimabad Hyderi Market",
+    address: "Block H, Hyderi Market, North Nazimabad, Karachi",
+    latitude: 24.9392,
+    longitude: 67.0425,
+    area: "North Nazimabad",
+  },
+  {
+    id: "dha-phase6",
+    name: "DHA Phase 6 Commercial Area",
+    address: "Khayaban-e-Bukhari, Phase 6, DHA, Karachi",
+    latitude: 24.8055,
+    longitude: 67.062,
+    area: "DHA",
+  },
+  {
+    id: "pechs",
+    name: "PECHS Block 2 / Tariq Road",
+    address: "Tariq Road Shopping District, PECHS Block 2, Karachi",
+    latitude: 24.8716,
+    longitude: 67.0658,
+    area: "PECHS",
+  },
+  {
+    id: "korangi",
+    name: "Korangi Industrial Park",
+    address: "Sector 23, Korangi Industrial Area, Karachi",
+    latitude: 24.8387,
+    longitude: 67.1205,
+    area: "Korangi",
+  },
+  {
+    id: "johar",
+    name: "Gulistan-e-Johar Chowrangi",
+    address: "Block 15, Johar Chowrangi, Gulistan-e-Johar, Karachi",
+    latitude: 24.918,
+    longitude: 67.135,
+    area: "Gulistan-e-Johar",
+  },
+];
+
+export const STATUS_CONFIG: Record<
+  OrderStatus,
+  {
+    label: string;
+    description: string;
+    badgeClass: string;
+    icon: string;
+    bgLight: string;
+    textLight: string;
+    borderLight: string;
+  }
+> = {
+  pending: {
+    label: "Pending",
+    description: "Searching for nearby available rider",
+    badgeClass: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
+    icon: "Clock",
+    bgLight: "#FEF3C7",
+    textLight: "#92400E",
+    borderLight: "#FCD34D",
+  },
+  accepted: {
+    label: "Accepted",
+    description: "Rider assigned and en route to pickup",
+    badgeClass: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800",
+    icon: "CheckCircle2",
+    bgLight: "#DBEAFE",
+    textLight: "#1E40AF",
+    borderLight: "#93C5FD",
+  },
+  picked_up: {
+    label: "Picked Up",
+    description: "Package received by rider from sender",
+    badgeClass: "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800",
+    icon: "PackageCheck",
+    bgLight: "#F3E8FF",
+    textLight: "#6B21A8",
+    borderLight: "#D8B4FE",
+  },
+  in_transit: {
+    label: "In Transit",
+    description: "Out for delivery to destination",
+    badgeClass: "bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800",
+    icon: "Truck",
+    bgLight: "#CCFBF1",
+    textLight: "#115E59",
+    borderLight: "#5EEAD4",
+  },
+  delivered: {
+    label: "Delivered",
+    description: "Package successfully handed over to recipient",
+    badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800",
+    icon: "BadgeCheck",
+    bgLight: "#D1FAE5",
+    textLight: "#065F46",
+    borderLight: "#6EE7B7",
+  },
+  cancelled: {
+    label: "Cancelled",
+    description: "Delivery request cancelled",
+    badgeClass: "bg-red-100 text-red-800 border-red-300 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800",
+    icon: "XCircle",
+    bgLight: "#FEE2E2",
+    textLight: "#991B1B",
+    borderLight: "#FCA5A5",
+  },
+};
+
+export const NEXT_ALLOWED_STATUS: Record<OrderStatus, OrderStatus[]> = {
+  pending: ["accepted", "cancelled"],
+  accepted: ["picked_up", "cancelled"],
+  picked_up: ["in_transit"],
+  in_transit: ["delivered"],
+  delivered: [],
+  cancelled: [],
+};
+
+export const DEMO_ACCOUNTS = [
+  {
+    role: "customer" as UserRole,
+    title: "Demo Customer",
+    email: "customer@logipulse.demo",
+    password: "demoPassword123!",
+    name: "Ayesha Khan (Customer)",
+    phone: "+92 300 1234567",
+    badge: "Customer Account",
+    desc: "Post parcel deliveries across Karachi, track live riders, and chat.",
+  },
+  {
+    role: "rider" as UserRole,
+    title: "Demo Delivery Rider",
+    email: "rider@logipulse.demo",
+    password: "demoPassword123!",
+    name: "Tariq Mahmood (Rider)",
+    phone: "+92 321 7654321",
+    vehicleType: "Honda CD 70 Motorcycle",
+    vehicleNumber: "KHI-KAS-4821",
+    badge: "Verified Rider",
+    desc: "Browse nearby orders, accept assignments, update delivery milestones.",
+  },
+  {
+    role: "admin" as UserRole,
+    title: "Logistics Operations Admin",
+    email: "admin@logipulse.demo",
+    password: "demoPassword123!",
+    name: "Burhan Siddiqui (Admin)",
+    phone: "+92 333 9876543",
+    badge: "Logistics Master Admin",
+    desc: "Monitor all fleet metrics, verify riders, view system-wide analytics.",
+  },
+];

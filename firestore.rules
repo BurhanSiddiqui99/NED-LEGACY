@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' ||
+        getUserData().role == 'admin'
+      );
+    }
+
+    function isRider() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'rider' ||
+        getUserData().role == 'rider'
+      );
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Authenticated users can read user profiles
+      allow read: if isAuthenticated();
+
+      // Users can create their own profile during registration (role must not be admin)
+      allow create: if isOwner(userId) && request.resource.data.role != 'admin';
+
+      // Users can update their own permitted fields, but cannot escalate to admin
+      allow update: if isOwner(userId) && request.resource.data.role == resource.data.role;
+
+      // Only admins can delete or change roles
+      allow delete: if isAdmin();
+      allow update: if isAdmin();
+    }
+
+    // Riders collection
+    match /riders/{riderId} {
+      allow read: if isAuthenticated();
+
+      // Registered rider can create and update their location and availability
+      allow create: if isOwner(riderId);
+      allow update: if isOwner(riderId) && (
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['currentLocation', 'isAvailable', 'updatedAt'])
+      );
+
+      // Only admins can update verification status or completed count
+      allow update, delete: if isAdmin();
+    }
+
+    // Orders collection
+    match /orders/{orderId} {
+      // Customers can read their own orders, riders can read pending or assigned orders, admins can read all
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.customerId == request.auth.uid ||
+        resource.data.riderId == request.auth.uid ||
+        (isRider() && resource.data.status == 'pending' && resource.data.riderId == null)
+      );
+
+      // Customers can create orders only for themselves with pending status
+      allow create: if isAuthenticated() &&
+        request.resource.data.customerId == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.riderId == null;
+
+      // Order update conditions:
+      // 1. Rider accepting pending order
+      // 2. Assigned rider advancing status (accepted -> picked_up -> in_transit -> delivered)
+      // 3. Customer cancelling their pending order
+      // 4. Admin full control
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        // Rider accepts order: order must be pending, riderId becomes request.auth.uid, status becomes accepted
+        (
+          isRider() &&
+          resource.data.status == 'pending' &&
+          resource.data.riderId == null &&
+          request.resource.data.riderId == request.auth.uid &&
+          request.resource.data.status == 'accepted'
+        ) ||
+        // Assigned rider updating progress
+        (
+          resource.data.riderId == request.auth.uid && (
+            (resource.data.status == 'accepted' && request.resource.data.status == 'picked_up') ||
+            (resource.data.status == 'picked_up' && request.resource.data.status == 'in_transit') ||
+            (resource.data.status == 'in_transit' && request.resource.data.status == 'delivered')
+          )
+        ) ||
+        // Customer cancels their pending order
+        (
+          resource.data.customerId == request.auth.uid &&
+          resource.data.status == 'pending' &&
+          request.resource.data.status == 'cancelled'
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Messages collection
+    match /messages/{messageId} {
+      // Only the sender or receiver can read the message, or admin
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.senderId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid
+      );
+
+      // Only the sender can create a message for their order
+      allow create: if isAuthenticated() &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.text is string &&
+        request.resource.data.text.size() > 0 &&
+        request.resource.data.text.size() <= 2000;
+
+      allow update, delete: if isAdmin();
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      // Notifications are readable only by their recipients or admin
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.userId == request.auth.uid ||
+        resource.data.userId == 'all'
+      );
+
+      // System or users can trigger notifications
+      allow create: if isAuthenticated();
+
+      // Recipient can mark notification as read
+      allow update: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin()) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+
+      allow delete: if isAdmin();
+    }
+  }
+}
