@@ -140,27 +140,22 @@ export async function registerRider(data: RegisterRiderData): Promise<{ user: Ap
 }
 
 export async function loginUser(email: string, password?: string): Promise<AppUser> {
-  // Check if it's one of the demo accounts or demo mode
   const lowerEmail = email.toLowerCase().trim();
-  const matchedUser = MockStore.getUsers().find((u) => u.email.toLowerCase() === lowerEmail);
 
-  if ((!isFirebaseConfigured || lowerEmail.includes(".demo")) && matchedUser) {
-    MockStore.setCurrentUser(matchedUser);
-    return matchedUser;
-  }
-
+  // If Firebase is configured with real credentials, perform real Firebase Auth
   if (isFirebaseConfigured && auth && db) {
     const cred = await signInWithEmailAndPassword(auth, email, password || "");
     const userDoc = await getDoc(doc(db, "users", cred.user.uid));
     if (!userDoc.exists()) {
-      throw new Error("User record not found in database.");
+      throw new Error("User record not found in Firestore database.");
     }
     const data = userDoc.data() as AppUser;
     MockStore.setCurrentUser(data);
     return data;
   }
 
-  // If in demo mode and user exists in mock
+  // Fallback for offline/local mode when Firebase keys have not yet been provided
+  const matchedUser = MockStore.getUsers().find((u) => u.email.toLowerCase() === lowerEmail);
   if (matchedUser) {
     MockStore.setCurrentUser(matchedUser);
     return matchedUser;

@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [riderProfile, setRiderProfile] = useState<Rider | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Initialize mock store if in browser
+  // Initialize store if in browser
   useEffect(() => {
     MockStore.init();
   }, []);
@@ -41,20 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Fetch or sync user and role
   const syncUserData = async (currentUid?: string) => {
     if (!currentUid) {
-      // Check MockStore
-      const mockUser = MockStore.getCurrentUser();
-      if (mockUser) {
-        setUser(mockUser);
-        if (mockUser.role === "rider") {
-          const rider = MockStore.getRider(mockUser.uid);
-          setRiderProfile(rider);
-        } else {
-          setRiderProfile(null);
-        }
-      } else {
-        setUser(null);
-        setRiderProfile(null);
-      }
+      setUser(null);
+      setRiderProfile(null);
       setLoading(false);
       return;
     }
@@ -65,19 +53,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (userDoc.exists()) {
           const userData = userDoc.data() as AppUser;
           setUser(userData);
-          MockStore.setCurrentUser(userData);
 
           if (userData.role === "rider") {
             const riderDoc = await getDoc(doc(db, "riders", currentUid));
             if (riderDoc.exists()) {
               const rData = riderDoc.data() as Rider;
               setRiderProfile(rData);
-              MockStore.saveRider(rData);
             }
           }
         }
       } else {
-        const mockUser = MockStore.getUser(currentUid) || MockStore.getCurrentUser();
+        const mockUser = MockStore.getUser(currentUid);
         setUser(mockUser);
         if (mockUser?.role === "rider") {
           setRiderProfile(MockStore.getRider(mockUser.uid));
@@ -98,22 +84,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (fbUser) {
           await syncUserData(fbUser.uid);
         } else {
-          // If no Firebase user, check if we have an active demo session
-          const activeMock = MockStore.getCurrentUser();
-          if (activeMock) {
-            setUser(activeMock);
-            if (activeMock.role === "rider") {
-              setRiderProfile(MockStore.getRider(activeMock.uid));
-            }
-          } else {
-            setUser(null);
-            setRiderProfile(null);
-          }
+          setUser(null);
+          setRiderProfile(null);
           setLoading(false);
         }
       });
     } else {
-      // Mock mode session check
+      // Local session check: only restore if a user explicitly signed in
       const current = MockStore.getCurrentUser();
       if (current) {
         setUser(current);
@@ -121,12 +98,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setRiderProfile(MockStore.getRider(current.uid));
         }
       } else {
-        // Default to demo customer for instant preview if not set
-        const defaultDemo = MockStore.getUser("demo-customer-uid");
-        if (defaultDemo) {
-          MockStore.setCurrentUser(defaultDemo);
-          setUser(defaultDemo);
-        }
+        setUser(null);
+        setRiderProfile(null);
       }
       setLoading(false);
     }
@@ -163,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await authService.logout();
       setUser(null);
       setRiderProfile(null);
+      MockStore.setCurrentUser(null);
       toast.info("You have been signed out.");
     } finally {
       setLoading(false);
@@ -175,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const newUser = await authService.registerCustomer(data);
       setUser(newUser);
       setRiderProfile(null);
-      toast.success("Account created successfully!");
+      toast.success("Account registered successfully!");
       return newUser;
     } finally {
       setLoading(false);
@@ -209,7 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setRiderProfile(null);
       }
-      toast.success(`Switched role to ${demo.title}`);
+      toast.success(`Active user: ${demo.title}`);
     } finally {
       setLoading(false);
     }
@@ -228,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (riderProfile) {
         setRiderProfile({ ...riderProfile, isAvailable });
       }
-      toast.success(`Rider status set to: ${isAvailable ? "Available" : "Unavailable"}`);
+      toast.success(`Rider status: ${isAvailable ? "Available" : "Unavailable"}`);
     } catch (err: any) {
       toast.error(err.message || "Failed to update availability");
     }
