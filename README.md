@@ -1,148 +1,153 @@
-# LogiPulse — Full-Stack Courier & Last-Mile Delivery Platform
+# LogiPulse — Courier & Last-Mile Delivery Platform
 
-**LogiPulse** is an enterprise-grade, full-stack last-mile courier and delivery operations management platform built for high-throughput urban logistics in Karachi. It interconnects **Customers**, **Delivery Riders**, and **Logistics Administrators** in real-time through Firebase Cloud Firestore, reactive state streaming, dynamic Haversine proximity calculations, and encrypted role-based access.
+## Project Overview
 
----
-
-## 🌟 Key Features
-
-### 1. Three Interconnected Role Dashboards
-- **Customer Portal (`/customer/dashboard`)**:
-  - Instant dispatch request booking with verified Karachi landmarks (NED University, Saddar, Clifton, Gulshan-e-Iqbal, North Nazimabad, etc.) or device GPS.
-  - Automated Haversine distance pricing calculation.
-  - Realtime visual step-by-step milestone delivery timeline.
-  - One-to-one courier chat with assigned riders.
-  - Pending order cancellation with confirmation protection.
-
-- **Rider Fleet Partner Portal (`/rider/dashboard`)**:
-  - **Smart Nearby Pickup**: Live radar ranking available orders dynamically by distance in kilometers from rider's current coordinates using the Haversine formula.
-  - Distance radius filters (*All Karachi*, *Within 2 km*, *Within 5 km*, *Within 10 km*).
-  - Online/Off-Duty status toggle.
-  - Atomic order acceptance using Firestore transactions to prevent race conditions.
-  - Sequential milestone advancement: `Accepted` ➔ `Picked Up` ➔ `In Transit` ➔ `Delivered` with canvas celebration.
-
-- **Admin Operations Control Center (`/admin/dashboard`)**:
-  - 7 Core system metrics: Total Customers, Total Riders, Available Riders, Total Orders, Pending Orders, Active Deliveries, and Completed Orders.
-  - Recharts analytics: Daily delivery activity trends and status breakdown donut chart.
-  - Comprehensive order manifests with search, status filters, and CSV export.
-  - Fleet and customer account management (activation, deactivation, and verification).
-  - System-wide broadcast alerts center.
+**LogiPulse** is a courier platform that connects three stakeholders, **Customers**, **Riders** and **Admins**, through one shared Firestore database. A customer requests a delivery, a nearby rider accepts it, and every status change, chat message and rider GPS update reaches all three dashboards in real time. Deliveries work anywhere in Pakistan, from Karachi to Lahore, Islamabad, Peshawar and Quetta.
 
 ---
 
-## 🛠️ Technology Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js App Router (14.2) |
-| Language | TypeScript (Strict mode) |
-| Styling | Tailwind CSS |
-| UI & Icons | Lucide React |
-| Database | Firebase Cloud Firestore (Modular SDK) |
-| Authentication | Firebase Authentication |
-| Real-Time Synchronization | Firestore `onSnapshot` listeners |
-| Notifications | In-app Firestore notification center + Sonner toasts + optional FCM |
-| Data Analytics | Recharts |
-| Geolocation / Distance | Browser Geolocation API + Mathematical Haversine formula |
+| Framework | Next.js 14 (App Router) + TypeScript |
+| Styling | Tailwind CSS, Lucide icons |
+| Database & Auth | Firebase Cloud Firestore + Firebase Authentication |
+| Realtime | Firestore `onSnapshot` listeners (no WebSockets needed) |
+| Maps | Google Maps JS API (Places autocomplete, Distance Matrix, live markers) |
+| Distance | Haversine formula (`lib/distance.ts`) |
+| Notifications | Firestore notification inboxes + Sonner toasts + browser notifications |
+| Charts | Recharts |
+| Offline demo mode | LocalStorage mock store with cross-tab sync (`lib/firebase/mock-store.ts`) |
 | Deployment | Vercel |
 
 ---
 
-## 🚀 Quick Start (Local Setup)
+## Three Dashboard Architecture
 
-### 1. Clone & Install Dependencies
+```
+  Customer (/customer)      Rider (/rider)      Admin (/admin)
+          │                       │                   │
+          └───────────────────────┼───────────────────┘
+                                  │
+          services/*.service.ts  (orders, riders, messages, notifications)
+                                  │
+                       lib/firebase/firestore.ts
+                                  │
+  Firestore: users · riders · orders · orders/{id}/messages · notifications
+```
+
+- **Login / Role selection** (`/login`) routes each user to their dashboard. `RoleGuard` blocks access to other roles' routes.
+- **Customer**: create a courier request, see own orders and live status, see the assigned rider, track the rider on a map, chat with the rider.
+- **Rider**: Smart Nearby Pickup feed, accept an order, update status (`Picked Up → In Transit → Delivered`), share live GPS, chat with the customer.
+- **Admin**: platform statistics, priority analytics, manage users/riders/orders, escalate priority, broadcast alerts.
+
+### Order workflow (shared data)
+
+| Step | Who | What happens in the data layer |
+|---|---|---|
+| 1 | Customer | `createOrder()` writes `orders/{id}` with `status: "pending"`, `riderId: null` and notifies the admin and rider inboxes |
+| 2 | Admin / Rider | Admin table (`subscribeToAllOrders`) and rider feed (`status == pending && riderId == null`) receive it through live listeners |
+| 3 | Rider | `acceptOrder()` runs a **Firestore transaction**: it re-reads the order and only assigns it if it is still unassigned |
+| 4 | Customer | The customer's order listener receives the rider's name, vehicle, phone and starting location |
+| 5 | Customer ↔ Rider | Messages are stored in `orders/{id}/messages`, and both sides listen to that subcollection |
+| 6 | Rider | `updateOrderStatus()` enforces `accepted → picked_up → in_transit → delivered` inside a transaction |
+| 7 | Customer + Admin | Both dashboards update from their snapshot listeners and get a notification |
+
+---
+
+## Smart Nearby Pickup
+
+`/rider/available-orders` ranks every pending order by **real distance** from the rider:
+
+1. The rider's position comes from device GPS or one of the city hubs (`components/rider/location-selector.tsx`).
+2. For each order, `calculateDistance()` applies the **Haversine formula** to the rider's and the pickup's lat/lng.
+3. Riders can filter by radius (2 / 5 / 10 / 25 km / all of Pakistan) and sort by nearest, priority, newest or **Smart** (distance + priority).
+4. A Google Map view shows every pickup pin around the rider.
+
+Each card shows labels like `Order #LP-10421 – 1.9 km`. The distance is recalculated from coordinates whenever the rider's location changes. None of these values are hard-coded.
+
+### Live rider tracking
+
+Once a rider accepts an order, the delivery page streams the rider's position onto the order (`currentRiderLocation`) using `navigator.geolocation.watchPosition`. Writes are throttled to one every 4 s or every 15 m of movement. Customer and admin maps move the rider pin as each update arrives. For demos without GPS, **Simulate Route** drives the rider toward the pickup and then the drop-off.
+
+---
+
+## Day 2 Priority Feature — "Peak Hours"
+
+The existing order model was extended, not duplicated. Each order now has an optional `priority: "normal" | "high" | "urgent"` field. Orders created before Day 2 have no `priority` and are treated as **Normal** by `getOrderPriority()`, so no migration is needed.
+
+| Requirement | Implementation |
+|---|---|
+| **1. Priority display** | `PriorityBadge` on every order card, table row, rider card and detail page. High orders get an orange ring, Urgent orders a pulsing red ring and tinted row |
+| **2. Filtering** | Priority filter chips with counts on the rider feed and the admin/customer order tables, plus a "Highest priority first" sort |
+| **3. Rider decision** | Rider Decision View table (Order · Distance · Priority · Score). **Smart sort** uses `score = distance ÷ weight` (Normal ×1, High ×1.6, Urgent ×2.5), so an Urgent order 2.5 km away ranks equal to a Normal order 1 km away |
+| **4. Admin analytics** | `PriorityAnalytics` shows live NORMAL / HIGH / URGENT counts, with "awaiting rider" and "in progress" breakdowns, computed from the realtime orders snapshot |
+
+Customers choose the priority when booking (High +PKR 100, Urgent +PKR 250). Admins can escalate an order's priority from the order detail page, which notifies the rider and the customer.
+
+---
+
+## Notifications
+
+Every event writes to Firestore `notifications`, keyed by inbox:
+
+- `<uid>`: personal notifications (order accepted, status changes, new chat message)
+- `admin`: all admins (new requests, acceptances, status changes)
+- `riders`: all riders (new delivery available, with an URGENT/HIGH tag)
+- `all`: system-wide broadcasts from the admin
+
+The header bell listens to the user's inboxes, shows a toast for each new item, and shows a browser notification when the tab is in the background.
+
+---
+
+## How to Run
+
 ```bash
-git clone https://github.com/BurhanSiddiqui99/NED-LEGACY.git
-cd NED-LEGACY
 npm install
+cp .env.example .env.local   # then fill in the keys below
+npm run dev                  # http://localhost:3000
 ```
 
-### 2. Run the Development Server
-```bash
-npm run dev
+`.env.local`:
+
+```env
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+NEXT_PUBLIC_FIREBASE_APP_ID=...
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...   # enable Maps JavaScript, Places, Geocoding, Distance Matrix
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+**Firestore security rules:** paste `firestore.rules` into *Firebase Console → Firestore → Rules → Publish*. The chat subcollection and live-location updates require these rules.
 
-> **💡 Zero-Config Live Mode for Hackathon Evaluators:**
-> If you launch the application without specifying Firebase credentials, LogiPulse automatically activates its **Hackathon Local Live Mode**. It provides instant cross-tab reactivity and pre-seeded Karachi orders, allowing you to test the entire 9-step workflow immediately!
+**No Firebase keys?** The app falls back to a LocalStorage demo store that has seeded orders at every priority. Changes sync across tabs, so you can open customer, rider and admin side by side.
 
----
-
-## ☁️ Firebase Cloud Configuration
-
-To connect LogiPulse directly to your Google Cloud Firebase project:
-
-1. Create a project at [Firebase Console](https://console.firebase.google.com/).
-2. Enable **Email/Password Authentication** under *Build > Authentication > Sign-in method*.
-3. Enable **Cloud Firestore** in test or production mode under *Build > Firestore Database*.
-4. Copy `.env.example` to `.env.local`:
-   ```bash
-   cp .env.example .env.local
-   ```
-5. Populate your Firebase project config keys inside `.env.local`:
-   ```env
-   NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSy...
-   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-app.firebaseapp.com
-   NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-app
-   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-app.appspot.com
-   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=1234567890
-   NEXT_PUBLIC_FIREBASE_APP_ID=1:1234567890:web:...
-   ```
-6. Deploy the included security rules and indexes:
-   ```bash
-   firebase deploy --only firestore:rules,firestore:indexes
-   ```
+**Deploy:** import the repo in Vercel, add the same environment variables, and deploy. Add the Vercel domain to the Google Maps API key's allowed referrers.
 
 ---
 
-## 🏆 Hackathon Workflow Demonstration (9 Steps)
+## Demo Sequence
 
-You can demonstrate the complete delivery lifecycle across multiple browser tabs:
-
-1. **Step 1 — Customer Login**:
-   - Navigate to `/login` and click **"Customer"** on the 1-Click Demo Launcher (`customer@logipulse.demo`).
-2. **Step 2 — Create Order**:
-   - Click **"New Courier Delivery"** (`/customer/create-order`).
-   - Select pickup from *NED University* and destination *Saddar Downtown*.
-   - Click **"Request Delivery Now"**. Status is set to **Pending**.
-3. **Step 3 — Rider Login**:
-   - In a second browser tab (or using the role switcher), sign in as **Rider** (`rider@logipulse.demo`).
-4. **Step 4 — Smart Nearby Pickup**:
-   - Open **Available Orders** (`/rider/available-orders`).
-   - Notice the order appears in real-time, dynamically ranked by distance from the rider's position in kilometers.
-5. **Step 5 — Rider Accepts Order**:
-   - Rider clicks **"Accept Order"**. An atomic transaction locks the order and marks it **Accepted**.
-6. **Step 6 — Customer Receives Update**:
-   - In the Customer tab, the assigned rider name (*Tariq Mahmood*), motorcycle specs, and an in-app notification instantly update.
-7. **Step 7 — Customer and Rider Chat**:
-   - Customer clicks **"Chat with Rider"** and sends a message.
-   - Rider opens **Chat** in their tab and replies in real-time.
-8. **Step 8 — Rider Advances Delivery Milestones**:
-   - In **My Deliveries**, rider advances status sequentially:
-     `Accepted` ➔ `Picked Up` ➔ `In Transit` ➔ `Delivered` 🎉.
-   - The customer tracking timeline synchronizes instantaneously.
-9. **Step 9 — Admin Monitoring**:
-   - Sign in as **Admin** (`admin@logipulse.demo`) to view updated revenue, fulfillment metrics, and Recharts daily volume curves.
+1. **Login / Roles**: `/login`, demo accounts for customer, rider and admin
+2. **Customer creates a request**: `/customer/create-order`, search any address in Pakistan and choose a priority
+3. **Rider finds it**: `/rider/available-orders`, where it appears instantly
+4. **Smart Nearby Pickup**: change the rider location and watch the distances and ranking update
+5. **Rider accepts**: the transaction assigns the order
+6. **Chat**: customer and rider message each other in real time
+7. **Status updates**: Picked Up → In Transit → Delivered, with live GPS or Simulate Route on the map
+8. **Admin dashboard**: stats, charts and the full order table
+9. **Day 2 Priority**: badges, filters, Rider Decision View and priority analytics
 
 ---
 
-## 🔒 Security Architecture
+## Judge Q&A Notes
 
-- **Least-Privilege Security Rules (`firestore.rules`)**:
-  - Unauthenticated requests are blocked.
-  - Customers can read and create only their own records.
-  - Riders can only read unassigned pending orders or orders assigned to their UID.
-  - Only the assigned rider can update milestone states in sequential order.
-  - Chat messages are isolated exclusively to the sender, receiver, and admin.
-  - Prevents client-side privilege escalation to Admin.
-
----
-
-## 🚢 Vercel Deployment
-
-1. Push your repository to GitHub.
-2. Go to [Vercel](https://vercel.com/) and click **"Add New Project"**.
-3. Import your `NED-LEGACY` repository.
-4. Add the Firebase environment variables from `.env.local` to the Vercel Project Settings.
-5. Click **Deploy**. Vercel will build and host the Next.js App Router project globally.
+- **How does User data reach the Rider dashboard?** Both read the same `orders` collection. The rider's `onSnapshot` query (`status == pending, riderId == null`) receives new documents as soon as they are written.
+- **Two riders accept at once?** `acceptOrder` uses `runTransaction`. The second transaction re-reads `riderId`, finds it set, and fails with "already accepted". Security rules also only allow `riderId: null → self`.
+- **Nearest pickup?** The Haversine great-circle distance between rider and pickup coordinates. Google Distance Matrix provides road distance for fare estimates.
+- **Status propagation?** Each dashboard subscribes to the order (or order list). Firestore pushes every change to all listeners, so no polling is needed.
+- **Day 2 changes?** One optional field (`priority`), one config map (`PRIORITY_CONFIG`) and a helper (`getOrderPriority`). Existing components gained a badge, a filter and a sort key.
+- **10,000 riders?** Geohash-indexed pickup queries (e.g. geofire-common) instead of loading every pending order. Move notifications to Cloud Functions with FCM push. Run assignment server-side with a scoring queue. Shard live locations into a lightweight `riderLocations` collection or Realtime Database.

@@ -77,14 +77,14 @@ export default function CustomerProfilePage() {
           </div>
         </div>
 
-        {/* Karachi Area Preferences */}
+        {/* Service Area */}
         <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 text-xs text-slate-600 dark:text-slate-300 space-y-1">
           <div className="flex items-center gap-1.5 font-bold text-blue-900 dark:text-blue-300">
             <MapPin className="w-4 h-4 text-blue-600" />
-            <span>Primary Service Hub: Karachi, Sindh</span>
+            <span>Service Area: All of Pakistan</span>
           </div>
           <p className="text-[11px] text-slate-500">
-            Your shipments are routed through the central LogiPulse Karachi dispatch cluster covering Saddar, Clifton, Gulshan-e-Iqbal, North Nazimabad, and NED University.
+            Book pickups and drop-offs in any Pakistani city, including Karachi, Lahore, Islamabad, Rawalpindi, Faisalabad, Multan, Peshawar and Quetta.
           </p>
         </div>
       </div>

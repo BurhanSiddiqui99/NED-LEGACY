@@ -4,6 +4,9 @@ import React, { useEffect, useState } from "react";
 import { ordersService } from "@/services/orders.service";
 import { Order } from "@/types";
 import { OrderTable } from "@/components/orders/order-table";
+import { PriorityAnalytics } from "@/components/dashboard/priority-analytics";
+import { getOrderPriority } from "@/constants";
+import { toMillis } from "@/lib/firebase/firestore";
 import { Package, Filter, Download } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,16 +27,17 @@ export default function AdminOrdersPage() {
       toast.error("No orders to export.");
       return;
     }
-    const headers = ["Order ID", "Customer", "Rider", "Pickup", "Delivery", "Status", "Price", "Created At"];
+    const headers = ["Order ID", "Customer", "Rider", "Pickup", "Delivery", "Priority", "Status", "Price", "Created At"];
     const rows = orders.map((o) => [
       o.id,
       `"${o.customerName || "Customer"}"`,
       `"${o.riderName || "Unassigned"}"`,
       `"${o.pickupAddress.replace(/"/g, '""')}"`,
       `"${o.deliveryAddress.replace(/"/g, '""')}"`,
+      getOrderPriority(o),
       o.status,
       o.price || 0,
-      typeof o.createdAt === "object" && "seconds" in o.createdAt ? new Date(o.createdAt.seconds * 1000).toISOString() : String(o.createdAt),
+      new Date(toMillis(o.createdAt)).toISOString(),
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -67,6 +71,8 @@ export default function AdminOrdersPage() {
           <span>Export Manifest (CSV)</span>
         </button>
       </div>
+
+      <PriorityAnalytics orders={orders} />
 
       <OrderTable
         orders={orders}

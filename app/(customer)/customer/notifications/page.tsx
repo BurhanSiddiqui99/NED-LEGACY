@@ -25,7 +25,7 @@ export default function CustomerNotificationsPage() {
 
   useEffect(() => {
     if (!user) return;
-    const unsub = notificationsService.subscribe(user.uid, (data) => {
+    const unsub = notificationsService.subscribe(user.uid, user.role, (data) => {
       setNotifications(data);
       setLoading(false);
     });
@@ -34,7 +34,7 @@ export default function CustomerNotificationsPage() {
 
   const handleMarkAllRead = async () => {
     if (!user) return;
-    await notificationsService.markAllAsRead(user.uid);
+    await notificationsService.markAllAsRead(user.uid, user.role);
   };
 
   const handleNotificationClick = async (notif: AppNotification) => {

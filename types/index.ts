@@ -42,6 +42,8 @@ export type OrderStatus =
   | "delivered"
   | "cancelled";
 
+export type OrderPriority = "normal" | "high" | "urgent";
+
 export interface Order {
   id: string;
   customerId: string;
@@ -66,6 +68,11 @@ export interface Order {
   deliveryInstructions?: string;
 
   status: OrderStatus;
+  priority?: OrderPriority;
+
+  // Live courier telemetry, written by the assigned rider's device
+  currentRiderLocation?: GeoLocation | null;
+  riderLocationUpdatedAt?: Timestamp | string | number | Date | null;
 
   createdAt: Timestamp | string | number | Date;
   updatedAt: Timestamp | string | number | Date;
@@ -106,11 +113,12 @@ export interface AppNotification {
   createdAt: Timestamp | string | number | Date;
 }
 
-export interface KarachiLocationPreset {
+export interface LocationPreset {
   id: string;
   name: string;
   address: string;
   latitude: number;
   longitude: number;
   area: string;
+  city: string;
 }

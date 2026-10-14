@@ -18,7 +18,7 @@ export default function LoginPage() {
                 LogiPulse
               </span>
               <span className="text-[10px] uppercase font-bold text-teal-400 tracking-wider">
-                Karachi Logistics Portal
+                Pakistan Logistics Portal
               </span>
             </div>
           </Link>

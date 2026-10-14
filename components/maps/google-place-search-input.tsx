@@ -2,8 +2,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { GeoLocation } from "@/types";
-import { loadGoogleMaps, isWithinKarachi, KARACHI_BOUNDS } from "@/lib/google-maps";
-import { KARACHI_LOCATIONS } from "@/constants";
+import { loadGoogleMaps, isWithinPakistan, PAKISTAN_BOUNDS } from "@/lib/google-maps";
+import { PAKISTAN_LOCATIONS } from "@/constants";
 import { MapPin, Search, Navigation, CheckCircle2, ChevronDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -23,7 +23,7 @@ export function GooglePlaceSearchInput({
   value,
   coords,
   onChange,
-  placeholder = "Search street, landmark, area in Karachi, Pakistan...",
+  placeholder = "Search street, landmark, area or city in Pakistan...",
   iconType = "pickup",
 }: GooglePlaceSearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -42,17 +42,16 @@ export function GooglePlaceSearchInput({
 
         setIsGoogleLoaded(true);
 
-        // Strictly restrict autocomplete bounds to Karachi metropolitan region
-        const karachiBounds = new googleMaps.LatLngBounds(
-          new googleMaps.LatLng(KARACHI_BOUNDS.south, KARACHI_BOUNDS.west),
-          new googleMaps.LatLng(KARACHI_BOUNDS.north, KARACHI_BOUNDS.east)
+        // Restrict autocomplete suggestions to Pakistan (any city)
+        const pakistanBounds = new googleMaps.LatLngBounds(
+          new googleMaps.LatLng(PAKISTAN_BOUNDS.south, PAKISTAN_BOUNDS.west),
+          new googleMaps.LatLng(PAKISTAN_BOUNDS.north, PAKISTAN_BOUNDS.east)
         );
 
         const autocomplete = new googleMaps.places.Autocomplete(inputRef.current, {
-          bounds: karachiBounds,
+          bounds: pakistanBounds,
           componentRestrictions: { country: "pk" },
           fields: ["formatted_address", "geometry", "name", "address_components"],
-          strictBounds: true, // STRICTLY KARACHI ONLY
         });
 
         autocomplete.addListener("place_changed", () => {
@@ -61,11 +60,8 @@ export function GooglePlaceSearchInput({
             const lat = place.geometry.location.lat();
             const lng = place.geometry.location.lng();
 
-            // Strict Karachi boundary validation
-            if (!isWithinKarachi(lat, lng)) {
-              toast.error(
-                "Selected location is outside Karachi! LogiPulse currently operates exclusively within Karachi, Pakistan."
-              );
+            if (!isWithinPakistan(lat, lng)) {
+              toast.error("Selected location is outside Pakistan. LogiPulse operates within Pakistan only.");
               return;
             }
 
@@ -91,7 +87,7 @@ export function GooglePlaceSearchInput({
     };
   }, []);
 
-  // Geocode manual text input strictly inside Karachi
+  // Geocode manual text input anywhere inside Pakistan
   const handleSearchManual = async () => {
     if (!value.trim()) return;
     setSearching(true);
@@ -100,37 +96,35 @@ export function GooglePlaceSearchInput({
       const googleMaps = await loadGoogleMaps();
       const geocoder = new googleMaps.Geocoder();
 
-      const karachiBounds = new googleMaps.LatLngBounds(
-        new googleMaps.LatLng(KARACHI_BOUNDS.south, KARACHI_BOUNDS.west),
-        new googleMaps.LatLng(KARACHI_BOUNDS.north, KARACHI_BOUNDS.east)
+      const pakistanBounds = new googleMaps.LatLngBounds(
+        new googleMaps.LatLng(PAKISTAN_BOUNDS.south, PAKISTAN_BOUNDS.west),
+        new googleMaps.LatLng(PAKISTAN_BOUNDS.north, PAKISTAN_BOUNDS.east)
       );
 
-      const query = value.toLowerCase().includes("karachi")
-        ? value
-        : `${value}, Karachi, Pakistan`;
+      const query = value.toLowerCase().includes("pakistan") ? value : `${value}, Pakistan`;
 
       geocoder.geocode(
         {
           address: query,
-          bounds: karachiBounds,
+          bounds: pakistanBounds,
           componentRestrictions: { country: "PK" },
         },
-        (results, status) => {
+        (results: google.maps.GeocoderResult[] | null, status: google.maps.GeocoderStatus) => {
           setSearching(false);
           if (status === "OK" && results && results[0]) {
             const loc = results[0].geometry.location;
             const lat = loc.lat();
             const lng = loc.lng();
 
-            if (!isWithinKarachi(lat, lng)) {
-              toast.error("Location found is outside Karachi! Please specify a Karachi area or landmark.");
+            if (!isWithinPakistan(lat, lng)) {
+              toast.error("Location found is outside Pakistan. Please enter a Pakistani city, area or landmark.");
               return;
             }
 
             onChange(results[0].formatted_address, { latitude: lat, longitude: lng });
-            toast.success(`Found in Karachi: ${results[0].formatted_address.split(",")[0]}`);
+            toast.success(`Found: ${results[0].formatted_address.split(",")[0]}`);
           } else {
-            toast.error("Location not found in Karachi. Try selecting from Karachi Hubs or refine keywords.");
+            toast.error("Location not found. Add the city name (e.g. \"Gulberg, Lahore\") or pick a hub.");
           }
         }
       );
@@ -147,13 +141,13 @@ export function GooglePlaceSearchInput({
     }
   };
 
-  const handlePresetSelect = (preset: (typeof KARACHI_LOCATIONS)[0]) => {
+  const handlePresetSelect = (preset: (typeof PAKISTAN_LOCATIONS)[0]) => {
     onChange(preset.address, {
       latitude: preset.latitude,
       longitude: preset.longitude,
     });
     setShowPresets(false);
-    toast.success(`Selected Karachi Hub: ${preset.name}`);
+    toast.success(`Selected hub: ${preset.name}, ${preset.city}`);
   };
 
   const isPickup = iconType === "pickup";
@@ -174,7 +168,7 @@ export function GooglePlaceSearchInput({
         </label>
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-            Karachi Only
+            All Pakistan
           </span>
           <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 hidden sm:inline">
             GPS: {coords.latitude.toFixed(3)}, {coords.longitude.toFixed(3)}
@@ -210,7 +204,7 @@ export function GooglePlaceSearchInput({
             onClick={handleSearchManual}
             disabled={searching}
             className="p-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition text-[11px] font-medium flex items-center gap-1 shadow-sm disabled:opacity-50"
-            title="Search this address strictly in Karachi"
+            title="Search this address anywhere in Pakistan"
           >
             {searching ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -225,7 +219,7 @@ export function GooglePlaceSearchInput({
             type="button"
             onClick={() => setShowPresets(!showPresets)}
             className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition text-[11px] font-medium flex items-center gap-0.5"
-            title="Choose popular Karachi hubs"
+            title="Choose popular hubs across Pakistan"
           >
             <span>Hubs</span>
             <ChevronDown className="w-3 h-3" />
@@ -233,14 +227,14 @@ export function GooglePlaceSearchInput({
         </div>
       </div>
 
-      {/* Preset Karachi Hubs Dropdown */}
+      {/* Preset hubs across Pakistan */}
       {showPresets && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl p-2 z-30 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
           <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Popular Karachi Verified Delivery Hubs
+            Popular Delivery Hubs Across Pakistan
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-48 overflow-y-auto">
-            {KARACHI_LOCATIONS.map((loc) => (
+            {PAKISTAN_LOCATIONS.map((loc) => (
               <button
                 key={loc.id}
                 type="button"
@@ -250,6 +244,7 @@ export function GooglePlaceSearchInput({
                 <div>
                   <p className="font-semibold text-slate-800 dark:text-slate-200 text-xs">
                     {loc.name}
+                    <span className="ml-1 text-[10px] font-medium text-slate-400">· {loc.city}</span>
                   </p>
                   <p className="text-[10px] text-slate-500 truncate max-w-[200px]">
                     {loc.address}

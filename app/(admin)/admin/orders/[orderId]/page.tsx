@@ -5,6 +5,10 @@ import { useParams } from "next/navigation";
 import { ordersService } from "@/services/orders.service";
 import { Order } from "@/types";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
+import { PriorityBadge } from "@/components/orders/priority-badge";
+import { PRIORITY_CONFIG, PRIORITY_LEVELS, getOrderPriority, isTrackable } from "@/constants";
+import { OrderPriority } from "@/types";
+import { toast } from "sonner";
 import { OrderTimeline } from "@/components/orders/order-timeline";
 import { formatDateTime, formatPKR } from "@/lib/utils";
 import { calculateDistance, formatDistance } from "@/lib/distance";
@@ -29,6 +33,20 @@ export default function AdminOrderDetailPage() {
   const orderId = params?.orderId as string;
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingPriority, setSavingPriority] = useState(false);
+
+  const handlePriorityChange = async (priority: OrderPriority) => {
+    if (!order || priority === getOrderPriority(order)) return;
+    setSavingPriority(true);
+    try {
+      await ordersService.updatePriority(order.id, priority);
+      toast.success(`Order #${order.id} set to ${PRIORITY_CONFIG[priority].label} priority`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update priority");
+    } finally {
+      setSavingPriority(false);
+    }
+  };
 
   useEffect(() => {
     if (!orderId) return;
@@ -90,6 +108,7 @@ export default function AdminOrderDetailPage() {
                 Order #{order.id}
               </h1>
               <OrderStatusBadge status={order.status} />
+              <PriorityBadge priority={getOrderPriority(order)} />
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               Master Logistics Record • Created {formatDateTime(order.createdAt)}
@@ -125,15 +144,8 @@ export default function AdminOrderDetailPage() {
               pickupAddress={order.pickupAddress}
               deliveryLocation={order.deliveryLocation}
               deliveryAddress={order.deliveryAddress}
-              riderLocation={
-                order.currentRiderLocation ||
-                (order.riderId && order.status !== "delivered" && order.status !== "cancelled"
-                  ? {
-                      latitude: (order.pickupLocation.latitude + order.deliveryLocation.latitude) / 2,
-                      longitude: (order.pickupLocation.longitude + order.deliveryLocation.longitude) / 2,
-                    }
-                  : null)
-              }
+              riderLocation={isTrackable(order) ? order.currentRiderLocation : null}
+              riderUpdatedAt={order.riderLocationUpdatedAt}
               riderName={order.riderName}
               status={order.status}
               height="360px"
@@ -188,6 +200,33 @@ export default function AdminOrderDetailPage() {
 
         {/* Right Column: Customer, Rider, Package */}
         <div className="space-y-6">
+          {/* Day 2: Priority escalation */}
+          {order.status !== "delivered" && order.status !== "cancelled" && (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">Delivery Priority</h3>
+              <div className="grid grid-cols-3 gap-2">
+                {PRIORITY_LEVELS.map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    disabled={savingPriority}
+                    onClick={() => handlePriorityChange(level)}
+                    className={`py-2 rounded-xl text-xs font-bold border transition disabled:opacity-50 ${
+                      getOrderPriority(order) === level
+                        ? PRIORITY_CONFIG[level].badgeClass
+                        : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {PRIORITY_CONFIG[level].label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Escalating notifies the assigned rider and customer instantly.
+              </p>
+            </div>
+          )}
+
           {/* Customer */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
             <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">

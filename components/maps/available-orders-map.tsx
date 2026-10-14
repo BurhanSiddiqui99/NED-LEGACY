@@ -7,8 +7,11 @@ import {
   createMapIcon,
   DARK_MAP_STYLE,
   LIGHT_MAP_STYLE,
-  KARACHI_DEFAULT_CENTER,
+  PAKISTAN_DEFAULT_CENTER,
+  PAKISTAN_DEFAULT_ZOOM,
 } from "@/lib/google-maps";
+import { PRIORITY_CONFIG, getOrderPriority } from "@/constants";
+import { PriorityBadge } from "@/components/orders/priority-badge";
 import { RefreshCw, Package, ArrowRight, MapPin, Bike } from "lucide-react";
 
 interface AvailableOrdersMapProps {
@@ -45,12 +48,12 @@ export function AvailableOrdersMap({
         const googleMaps = await loadGoogleMaps();
         if (!isMounted || !mapContainerRef.current) return;
 
-        const centerLat = riderLocation?.latitude || KARACHI_DEFAULT_CENTER.lat;
-        const centerLng = riderLocation?.longitude || KARACHI_DEFAULT_CENTER.lng;
+        const centerLat = riderLocation?.latitude || PAKISTAN_DEFAULT_CENTER.lat;
+        const centerLng = riderLocation?.longitude || PAKISTAN_DEFAULT_CENTER.lng;
 
         const map = new googleMaps.Map(mapContainerRef.current, {
           center: { lat: centerLat, lng: centerLng },
-          zoom: 12,
+          zoom: riderLocation ? 12 : PAKISTAN_DEFAULT_ZOOM,
           styles: isDarkMode ? DARK_MAP_STYLE : LIGHT_MAP_STYLE,
           zoomControl: true,
           streetViewControl: false,
@@ -91,13 +94,18 @@ export function AvailableOrdersMap({
               lng: order.pickupLocation.longitude,
             },
             map,
-            title: `Order #${order.id}: ${order.packageDescription}`,
+            title: `Order #${order.id} [${PRIORITY_CONFIG[getOrderPriority(order)].label}]: ${order.packageDescription}`,
             icon: createMapIcon("pickup"),
+            label:
+              getOrderPriority(order) === "normal"
+                ? undefined
+                : { text: "!", color: "#ffffff", fontWeight: "900", fontSize: "14px" },
+            zIndex: PRIORITY_CONFIG[getOrderPriority(order)].rank * 10,
           });
 
+          // Clicking a pin previews it; the popup button hands it to onSelectOrder
           marker.addListener("click", () => {
             setSelectedOrder(order);
-            if (onSelectOrder) onSelectOrder(order);
           });
 
           markersRef.current.push(marker);
@@ -138,7 +146,7 @@ export function AvailableOrdersMap({
       {loading && (
         <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20">
           <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mb-2" />
-          <span className="text-xs font-semibold">Loading Live Karachi Dispatch Map...</span>
+          <span className="text-xs font-semibold">Loading Live Dispatch Map...</span>
         </div>
       )}
 
@@ -154,8 +162,9 @@ export function AvailableOrdersMap({
       {selectedOrder && (
         <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:max-w-sm z-20 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">
+            <span className="font-mono text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
               #{selectedOrder.id}
+              <PriorityBadge priority={getOrderPriority(selectedOrder)} />
             </span>
             <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
               PKR {selectedOrder.price}

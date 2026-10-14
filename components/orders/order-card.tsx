@@ -3,6 +3,8 @@
 import React from "react";
 import { Order } from "@/types";
 import { OrderStatusBadge } from "./order-status-badge";
+import { PriorityBadge } from "./priority-badge";
+import { PRIORITY_CONFIG, getOrderPriority } from "@/constants";
 import { formatPKR, formatRelativeTime } from "@/lib/utils";
 import {
   MapPin,
@@ -28,9 +30,12 @@ export function OrderCard({ order, rolePrefix = "/customer" }: OrderCardProps) {
       : `${rolePrefix}/orders/${order.id}`;
 
   const chatLink = `${rolePrefix}/messages/${order.id}`;
+  const priority = getOrderPriority(order);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition group">
+    <div
+      className={`bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition group ${PRIORITY_CONFIG[priority].cardClass}`}
+    >
       {/* Top Header */}
       <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2">
@@ -41,7 +46,10 @@ export function OrderCard({ order, rolePrefix = "/customer" }: OrderCardProps) {
             • {formatRelativeTime(order.createdAt)}
           </span>
         </div>
-        <OrderStatusBadge status={order.status} />
+        <div className="flex items-center gap-1.5">
+          <PriorityBadge priority={priority} />
+          <OrderStatusBadge status={order.status} />
+        </div>
       </div>
 
       {/* Route Info */}

@@ -6,6 +6,9 @@ import { useAuth } from "@/contexts/auth-context";
 import { ordersService } from "@/services/orders.service";
 import { Order } from "@/types";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
+import { PriorityBadge } from "@/components/orders/priority-badge";
+import { LiveLocationSharer } from "@/components/rider/live-location-sharer";
+import { getOrderPriority, isTrackable } from "@/constants";
 import { OrderTimeline } from "@/components/orders/order-timeline";
 import { DeliveryStatusActions } from "@/components/rider/delivery-status-actions";
 import { formatDateTime, formatPKR } from "@/lib/utils";
@@ -92,6 +95,7 @@ export default function RiderDeliveryDetailPage() {
                 #{order.id}
               </h1>
               <OrderStatusBadge status={order.status} />
+              <PriorityBadge priority={getOrderPriority(order)} />
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               Assigned to you • Fee: {formatPKR(order.price || 400)}
@@ -129,18 +133,17 @@ export default function RiderDeliveryDetailPage() {
               pickupAddress={order.pickupAddress}
               deliveryLocation={order.deliveryLocation}
               deliveryAddress={order.deliveryAddress}
-              riderLocation={
-                order.currentRiderLocation || {
-                  latitude: order.pickupLocation.latitude,
-                  longitude: order.pickupLocation.longitude,
-                }
-              }
+              riderLocation={isTrackable(order) ? order.currentRiderLocation : null}
+              riderUpdatedAt={order.riderLocationUpdatedAt}
               riderName={order.riderName || "You"}
               status={order.status}
               height="360px"
               interactive={true}
             />
           </div>
+
+          {/* Live GPS sharing for customer & admin tracking */}
+          <LiveLocationSharer order={order} riderUid={user?.uid || ""} />
 
           {/* Milestone Action Controller */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">

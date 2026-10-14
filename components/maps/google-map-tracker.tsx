@@ -7,8 +7,10 @@ import {
   createMapIcon,
   DARK_MAP_STYLE,
   LIGHT_MAP_STYLE,
-  KARACHI_DEFAULT_CENTER,
+  PAKISTAN_DEFAULT_CENTER,
+  escapeHtml,
 } from "@/lib/google-maps";
+import { formatRelativeTime } from "@/lib/utils";
 import {
   Navigation,
   MapPin,
@@ -17,6 +19,7 @@ import {
   RefreshCw,
   AlertCircle,
   Layers,
+  Crosshair,
 } from "lucide-react";
 
 interface GoogleMapTrackerProps {
@@ -26,6 +29,7 @@ interface GoogleMapTrackerProps {
   deliveryAddress?: string;
   riderLocation?: GeoLocation | null;
   riderName?: string;
+  riderUpdatedAt?: any;
   status: OrderStatus;
   height?: string;
   interactive?: boolean;
@@ -38,6 +42,7 @@ export function GoogleMapTracker({
   deliveryAddress,
   riderLocation,
   riderName,
+  riderUpdatedAt,
   status,
   height = "380px",
   interactive = true,
@@ -54,6 +59,13 @@ export function GoogleMapTracker({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
+  const [followRider, setFollowRider] = useState(false);
+  // Re-render every 15 s so "updated Xs ago" stays fresh between location writes
+  const [, setClock] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setClock((c) => c + 1), 15000);
+    return () => clearInterval(id);
+  }, []);
 
   // Detect dark mode from document class
   const isDarkMode =
@@ -69,8 +81,8 @@ export function GoogleMapTracker({
         const googleMaps = await loadGoogleMaps();
         if (!isMounted || !mapContainerRef.current) return;
 
-        const centerLat = pickupLocation?.latitude || KARACHI_DEFAULT_CENTER.lat;
-        const centerLng = pickupLocation?.longitude || KARACHI_DEFAULT_CENTER.lng;
+        const centerLat = pickupLocation?.latitude || PAKISTAN_DEFAULT_CENTER.lat;
+        const centerLng = pickupLocation?.longitude || PAKISTAN_DEFAULT_CENTER.lng;
 
         // Initialize Map
         const map = new googleMaps.Map(mapContainerRef.current, {
@@ -102,7 +114,7 @@ export function GoogleMapTracker({
           content: `
             <div style="color: #0f172a; font-family: sans-serif; padding: 4px; font-size: 12px;">
               <strong style="color: #0284c7;">📍 Pickup Location</strong>
-              <p style="margin: 4px 0 0; color: #475569;">${pickupAddress || "Karachi, Pakistan"}</p>
+              <p style="margin: 4px 0 0; color: #475569;">${escapeHtml(pickupAddress || "Pickup point")}</p>
             </div>
           `,
         });
@@ -129,7 +141,7 @@ export function GoogleMapTracker({
           content: `
             <div style="color: #0f172a; font-family: sans-serif; padding: 4px; font-size: 12px;">
               <strong style="color: #059669;">🏁 Delivery Destination</strong>
-              <p style="margin: 4px 0 0; color: #475569;">${deliveryAddress || "Karachi, Pakistan"}</p>
+              <p style="margin: 4px 0 0; color: #475569;">${escapeHtml(deliveryAddress || "Destination")}</p>
             </div>
           `,
         });
@@ -159,7 +171,7 @@ export function GoogleMapTracker({
             content: `
               <div style="color: #0f172a; font-family: sans-serif; padding: 4px; font-size: 12px;">
                 <strong style="color: #7c3aed;">🛵 Courier On The Move</strong>
-                <p style="margin: 4px 0 0; color: #475569;"><strong>${riderName || "Rider"}</strong> is currently in transit.</p>
+                <p style="margin: 4px 0 0; color: #475569;"><strong>${escapeHtml(riderName || "Rider")}</strong> is on the way.</p>
               </div>
             `,
           });
@@ -220,35 +232,45 @@ export function GoogleMapTracker({
     isDarkMode,
   ]);
 
-  // Update Rider Location Dynamically in Real-Time
+  // Move the rider pin whenever a new live location arrives from Firestore
   useEffect(() => {
-    if (!mapInstanceRef.current || !window.google?.maps) return;
+    if (loading || !mapInstanceRef.current || !window.google?.maps) return;
 
-    if (riderLocation && markersRef.current.rider) {
-      markersRef.current.rider.setPosition({
-        lat: riderLocation.latitude,
-        lng: riderLocation.longitude,
-      });
+    const pickup = { lat: pickupLocation.latitude, lng: pickupLocation.longitude };
+    const dropoff = { lat: deliveryLocation.latitude, lng: deliveryLocation.longitude };
 
-      // Update route polyline path
-      if (polylineRef.current) {
-        polylineRef.current.setPath([
-          { lat: pickupLocation.latitude, lng: pickupLocation.longitude },
-          { lat: riderLocation.latitude, lng: riderLocation.longitude },
-          { lat: deliveryLocation.latitude, lng: deliveryLocation.longitude },
-        ]);
+    if (!riderLocation) {
+      if (markersRef.current.rider) {
+        markersRef.current.rider.setMap(null);
+        markersRef.current.rider = undefined;
       }
-    } else if (riderLocation && !markersRef.current.rider) {
-      const riderMarker = new window.google.maps.Marker({
-        position: { lat: riderLocation.latitude, lng: riderLocation.longitude },
+      polylineRef.current?.setPath([pickup, dropoff]);
+      return;
+    }
+
+    const position = { lat: riderLocation.latitude, lng: riderLocation.longitude };
+    if (markersRef.current.rider) {
+      markersRef.current.rider.setPosition(position);
+    } else {
+      markersRef.current.rider = new window.google.maps.Marker({
+        position,
         map: mapInstanceRef.current,
         title: `Courier: ${riderName || "Active Rider"}`,
         icon: createMapIcon("rider"),
         zIndex: 999,
       });
-      markersRef.current.rider = riderMarker;
     }
-  }, [riderLocation?.latitude, riderLocation?.longitude, riderName]);
+
+    // Before pickup the route runs rider -> pickup -> drop-off, afterwards pickup -> rider -> drop-off
+    polylineRef.current?.setPath(
+      status === "accepted" ? [position, pickup, dropoff] : [pickup, position, dropoff]
+    );
+
+    if (followRider) {
+      mapInstanceRef.current.panTo(position);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [riderLocation?.latitude, riderLocation?.longitude, riderName, status, loading, followRider]);
 
   const handleCenterRider = () => {
     if (!mapInstanceRef.current) return;
@@ -300,9 +322,9 @@ export function GoogleMapTracker({
       {loadError && (
         <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center text-white z-20">
           <AlertCircle className="w-10 h-10 text-amber-400 mb-2" />
-          <h4 className="text-sm font-bold text-white">Google Maps Telemetry Active</h4>
+          <h4 className="text-sm font-bold text-white">Google Maps could not load</h4>
           <p className="text-xs text-slate-300 max-w-sm mt-1">
-            Displaying simulated Karachi GPS coordinates ({pickupLocation.latitude.toFixed(3)},{" "}
+            Check the Maps API key / allowed domains. Route coordinates: ({pickupLocation.latitude.toFixed(3)},{" "}
             {pickupLocation.longitude.toFixed(3)} → {deliveryLocation.latitude.toFixed(3)},{" "}
             {deliveryLocation.longitude.toFixed(3)})
           </p>
@@ -334,6 +356,19 @@ export function GoogleMapTracker({
 
           {/* Top Right Map Control Buttons */}
           <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+            {riderLocation && (
+              <button
+                onClick={() => setFollowRider(!followRider)}
+                className={`p-2 rounded-xl border border-white/10 shadow-lg text-xs font-medium transition flex items-center gap-1 ${
+                  followRider ? "bg-purple-600 text-white" : "bg-slate-900/90 hover:bg-slate-800 text-white"
+                }`}
+                title="Keep the map centred on the rider"
+                aria-pressed={followRider}
+              >
+                <Crosshair className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Follow</span>
+              </button>
+            )}
             <button
               onClick={handleCenterRider}
               className="p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-white/10 shadow-lg text-xs font-medium transition flex items-center gap-1"
@@ -376,6 +411,11 @@ export function GoogleMapTracker({
                 <Bike className="w-3.5 h-3.5 text-purple-400 animate-bounce" />
                 <span className="hidden sm:inline">Rider Live:</span>
                 <span>{riderName || "Courier"}</span>
+                {riderUpdatedAt && (
+                  <span className="text-[10px] font-medium text-purple-300">
+                    • {formatRelativeTime(riderUpdatedAt)}
+                  </span>
+                )}
               </div>
             )}
           </div>

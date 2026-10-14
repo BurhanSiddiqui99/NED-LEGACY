@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { ordersService } from "@/services/orders.service";
 import { Order } from "@/types";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
+import { PriorityBadge } from "@/components/orders/priority-badge";
+import { getOrderPriority, isTrackable } from "@/constants";
 import { OrderTimeline } from "@/components/orders/order-timeline";
 import { formatDateTime, formatPKR } from "@/lib/utils";
 import { calculateDistance, formatDistance } from "@/lib/distance";
@@ -112,6 +114,7 @@ export default function CustomerOrderDetailPage() {
                 #{order.id}
               </h1>
               <OrderStatusBadge status={order.status} />
+              <PriorityBadge priority={getOrderPriority(order)} />
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               Placed on {formatDateTime(order.createdAt)}
@@ -162,15 +165,8 @@ export default function CustomerOrderDetailPage() {
               pickupAddress={order.pickupAddress}
               deliveryLocation={order.deliveryLocation}
               deliveryAddress={order.deliveryAddress}
-              riderLocation={
-                order.currentRiderLocation ||
-                (order.riderId && order.status !== "delivered" && order.status !== "cancelled"
-                  ? {
-                      latitude: (order.pickupLocation.latitude + order.deliveryLocation.latitude) / 2,
-                      longitude: (order.pickupLocation.longitude + order.deliveryLocation.longitude) / 2,
-                    }
-                  : null)
-              }
+              riderLocation={isTrackable(order) ? order.currentRiderLocation : null}
+              riderUpdatedAt={order.riderLocationUpdatedAt}
               riderName={order.riderName}
               status={order.status}
               height="360px"
@@ -283,7 +279,7 @@ export default function CustomerOrderDetailPage() {
                   Looking for a nearby rider
                 </h4>
                 <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-                  Your delivery request is actively broadcasting to verified Karachi riders in this zone.
+                  Your request is visible to nearby verified riders. You will be notified the moment one accepts.
                 </p>
               </div>
             )}

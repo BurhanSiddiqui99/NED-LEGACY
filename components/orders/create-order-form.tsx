@@ -4,7 +4,8 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { ordersService } from "@/services/orders.service";
-import { KARACHI_LOCATIONS } from "@/constants";
+import { PAKISTAN_LOCATIONS, PRIORITY_CONFIG, PRIORITY_LEVELS } from "@/constants";
+import { OrderPriority } from "@/types";
 import { calculateDistance, formatDistance, estimateTravelTimeMinutes } from "@/lib/distance";
 import { formatPKR } from "@/lib/utils";
 import { toast } from "sonner";
@@ -19,6 +20,9 @@ import {
   Calculator,
   Loader2,
   Sparkles,
+  Flame,
+  AlertTriangle,
+  Minus,
 } from "lucide-react";
 import { GooglePlaceSearchInput } from "@/components/maps/google-place-search-input";
 import { GoogleMapTracker } from "@/components/maps/google-map-tracker";
@@ -30,19 +34,19 @@ export function CreateOrderForm() {
   const [submitting, setSubmitting] = useState(false);
 
   // Locations state
-  const [pickupPreset, setPickupPreset] = useState(KARACHI_LOCATIONS[0].id); // NED University
-  const [deliveryPreset, setDeliveryPreset] = useState(KARACHI_LOCATIONS[1].id); // Saddar
+  const [pickupPreset, setPickupPreset] = useState(PAKISTAN_LOCATIONS[0].id); // NED University
+  const [deliveryPreset, setDeliveryPreset] = useState(PAKISTAN_LOCATIONS[1].id); // Saddar
 
-  const [pickupAddress, setPickupAddress] = useState(KARACHI_LOCATIONS[0].address);
+  const [pickupAddress, setPickupAddress] = useState(PAKISTAN_LOCATIONS[0].address);
   const [pickupCoords, setPickupCoords] = useState({
-    latitude: KARACHI_LOCATIONS[0].latitude,
-    longitude: KARACHI_LOCATIONS[0].longitude,
+    latitude: PAKISTAN_LOCATIONS[0].latitude,
+    longitude: PAKISTAN_LOCATIONS[0].longitude,
   });
 
-  const [deliveryAddress, setDeliveryAddress] = useState(KARACHI_LOCATIONS[1].address);
+  const [deliveryAddress, setDeliveryAddress] = useState(PAKISTAN_LOCATIONS[1].address);
   const [deliveryCoords, setDeliveryCoords] = useState({
-    latitude: KARACHI_LOCATIONS[1].latitude,
-    longitude: KARACHI_LOCATIONS[1].longitude,
+    latitude: PAKISTAN_LOCATIONS[1].latitude,
+    longitude: PAKISTAN_LOCATIONS[1].longitude,
   });
 
   // Package & Recipient state
@@ -51,11 +55,12 @@ export function CreateOrderForm() {
   const [packageDescription, setPackageDescription] = useState("");
   const [packageWeight, setPackageWeight] = useState("1.0");
   const [deliveryInstructions, setDeliveryInstructions] = useState("");
+  const [priority, setPriority] = useState<OrderPriority>("normal");
 
   // Location selector change handlers
   const handlePickupChange = (presetId: string) => {
     setPickupPreset(presetId);
-    const loc = KARACHI_LOCATIONS.find((l) => l.id === presetId);
+    const loc = PAKISTAN_LOCATIONS.find((l) => l.id === presetId);
     if (loc) {
       setPickupAddress(loc.address);
       setPickupCoords({ latitude: loc.latitude, longitude: loc.longitude });
@@ -64,7 +69,7 @@ export function CreateOrderForm() {
 
   const handleDeliveryChange = (presetId: string) => {
     setDeliveryPreset(presetId);
-    const loc = KARACHI_LOCATIONS.find((l) => l.id === presetId);
+    const loc = PAKISTAN_LOCATIONS.find((l) => l.id === presetId);
     if (loc) {
       setDeliveryAddress(loc.address);
       setDeliveryCoords({ latitude: loc.latitude, longitude: loc.longitude });
@@ -90,7 +95,7 @@ export function CreateOrderForm() {
       },
       (error) => {
         setFetchingGeo(false);
-        toast.error(`Geolocation permission denied: ${error.message}. Please select a known Karachi location.`);
+        toast.error(`Geolocation permission denied: ${error.message}. Please search an address or pick a hub.`);
       },
       { timeout: 10000 }
     );
@@ -131,8 +136,9 @@ export function CreateOrderForm() {
   const estimatedMinutes =
     googleDuration ?? `~${estimateTravelTimeMinutes(distanceKm)} mins`;
   const weightNum = parseFloat(packageWeight) || 1;
-  // Karachi Courier Rate: Base PKR 150 + 35 PKR/km + 25 PKR/kg
-  const estimatedPrice = Math.round(150 + distanceKm * 35 + weightNum * 25);
+  // Courier Rate: Base PKR 150 + 35 PKR/km + 25 PKR/kg + priority surcharge
+  const prioritySurcharge = PRIORITY_CONFIG[priority].surchargePKR;
+  const estimatedPrice = Math.round(150 + distanceKm * 35 + weightNum * 25 + prioritySurcharge);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,8 +179,9 @@ export function CreateOrderForm() {
         packageDescription: packageDescription.trim(),
         packageWeight: weightNum,
         deliveryInstructions: deliveryInstructions.trim(),
+        priority,
         price: estimatedPrice,
-        estimatedDeliveryTime: `${estimatedMinutes} mins`,
+        estimatedDeliveryTime: estimatedMinutes,
       });
 
       toast.success(`Courier Order #${created.id} created successfully! Searching for riders...`);
@@ -192,7 +199,7 @@ export function CreateOrderForm() {
     setPackageDescription("Important Academic Project Files & Arduino Hardware Kit");
     setPackageWeight("1.5");
     setDeliveryInstructions("Please ring bell upon arrival at entrance gate.");
-    toast.info("Prefilled realistic Karachi delivery sample details!");
+    toast.info("Prefilled sample delivery details!");
   };
 
   return (
@@ -203,7 +210,7 @@ export function CreateOrderForm() {
             Dispatch Courier Delivery
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Specify verified Karachi pickup & delivery coordinates with automated distance pricing.
+            Pick any pickup & delivery address in Pakistan. Fare is calculated from real distance.
           </p>
         </div>
         <button
@@ -255,7 +262,7 @@ export function CreateOrderForm() {
                 setPickupAddress(addr);
                 setPickupCoords(coords);
               }}
-              placeholder="Search Karachi address or click Hubs..."
+              placeholder="Search any address in Pakistan or click Hubs..."
               iconType="pickup"
             />
           </div>
@@ -283,6 +290,50 @@ export function CreateOrderForm() {
               placeholder="Search destination street / area or click Hubs..."
               iconType="delivery"
             />
+          </div>
+
+          {/* Day 2: Delivery Priority */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+            <h3 className="font-semibold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+              <Flame className="w-4 h-4 text-red-500" /> Delivery Priority
+            </h3>
+            <div role="radiogroup" aria-label="Delivery priority" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {PRIORITY_LEVELS.map((level) => {
+                const cfg = PRIORITY_CONFIG[level];
+                const Icon = level === "urgent" ? Flame : level === "high" ? AlertTriangle : Minus;
+                const selected = priority === level;
+                const selectedStyle =
+                  level === "urgent"
+                    ? "border-red-500 bg-red-50 dark:bg-red-950/40 ring-2 ring-red-500/30"
+                    : level === "high"
+                    ? "border-orange-500 bg-orange-50 dark:bg-orange-950/40 ring-2 ring-orange-500/30"
+                    : "border-blue-500 bg-blue-50 dark:bg-blue-950/40 ring-2 ring-blue-500/30";
+                return (
+                  <button
+                    key={level}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setPriority(level)}
+                    className={`text-left p-3 rounded-xl border transition ${
+                      selected
+                        ? selectedStyle
+                        : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <Icon className="w-3.5 h-3.5" /> {cfg.label}
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-500">
+                        {cfg.surchargePKR ? `+PKR ${cfg.surchargePKR}` : "No extra fee"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{cfg.description}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Recipient & Package Details */}
@@ -384,7 +435,7 @@ export function CreateOrderForm() {
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500">
-                  {googleDistance ? "Google Road Distance:" : "Karachi Distance:"}
+                  {googleDistance ? "Google Road Distance:" : "Straight-line Distance:"}
                 </span>
                 <span className="font-bold text-slate-900 dark:text-white text-sm">
                   {formatDistance(distanceKm)}
@@ -408,6 +459,12 @@ export function CreateOrderForm() {
                   PKR {Math.round(weightNum * 25)}
                 </span>
               </div>
+              {prioritySurcharge > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500">{PRIORITY_CONFIG[priority].label} Priority:</span>
+                  <span className="text-slate-700 dark:text-slate-300">PKR {prioritySurcharge}</span>
+                </div>
+              )}
 
               <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
                 <span className="font-bold text-xs text-slate-900 dark:text-white">

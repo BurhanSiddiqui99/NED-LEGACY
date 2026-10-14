@@ -5,6 +5,8 @@ import { Order, Rider } from "@/types";
 import { calculateDistance, formatDistance, estimateTravelTimeMinutes } from "@/lib/distance";
 import { formatPKR, formatRelativeTime } from "@/lib/utils";
 import { ordersService } from "@/services/orders.service";
+import { PriorityBadge } from "@/components/orders/priority-badge";
+import { PRIORITY_CONFIG, getOrderPriority } from "@/constants";
 import { toast } from "sonner";
 import {
   MapPin,
@@ -49,6 +51,7 @@ export function NearbyOrderCard({
   );
 
   const estimatedPickupTimeMin = estimateTravelTimeMinutes(pickupDistanceKm);
+  const priority = getOrderPriority(order);
 
   const handleAccept = async () => {
     if (!rider.isAvailable) {
@@ -70,13 +73,16 @@ export function NearbyOrderCard({
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition space-y-4">
+    <div
+      className={`bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition space-y-4 ${PRIORITY_CONFIG[priority].cardClass}`}
+    >
       {/* Top Header: ID + Distance Pill */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">
             #{order.id}
           </span>
+          <PriorityBadge priority={priority} />
           <span className="text-[11px] text-slate-400">
             • {formatRelativeTime(order.createdAt)}
           </span>

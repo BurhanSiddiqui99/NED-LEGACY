@@ -28,7 +28,7 @@ export default function AdminSettingsPage() {
 
   const handleResetDemoData = () => {
     MockStore.resetDefaults();
-    toast.success("Demo dataset reset to initial state with Karachi orders!");
+    toast.success("Demo dataset reset to its initial state!");
   };
 
   return (
@@ -95,7 +95,7 @@ export default function AdminSettingsPage() {
               </h2>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed">
-              Restore initial seed orders and riders across Karachi hubs for testing delivery workflows.
+              Restore the initial seed orders (all priorities) and riders for testing delivery workflows.
             </p>
           </div>
 
@@ -117,7 +117,7 @@ export default function AdminSettingsPage() {
         <div className="flex items-center gap-2">
           <DollarSign className="w-4 h-4 text-blue-600" />
           <h2 className="font-bold text-sm text-slate-900 dark:text-white">
-            Karachi Distance-Based Courier Rate Configuration
+            Distance-Based Courier Rate Configuration
           </h2>
         </div>
 

@@ -48,7 +48,7 @@ export function formatDistance(km: number): string {
 }
 
 /**
- * Estimated travel time in minutes based on urban Karachi courier speeds (~25 km/h avg)
+ * Estimated travel time in minutes based on urban courier speeds (~24 km/h avg)
  */
 export function estimateTravelTimeMinutes(km: number): number {
   const averageSpeedKmH = 24;

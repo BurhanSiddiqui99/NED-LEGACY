@@ -77,7 +77,7 @@ export default function AdminAnalyticsPage() {
         <StatCard
           title="Avg Courier Speed"
           value="26 mins"
-          subtitle="Karachi urban transit benchmark"
+          subtitle="Urban transit benchmark"
           icon={Clock}
           colorScheme="purple"
         />

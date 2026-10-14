@@ -9,8 +9,10 @@ import {
   acceptOrder,
   updateOrderStatus,
   cancelOrder,
+  updateOrderPriority,
+  updateRiderLiveLocation,
 } from "@/lib/firebase/firestore";
-import { Order, OrderStatus, Rider } from "@/types";
+import { GeoLocation, Order, OrderPriority, OrderStatus, Rider } from "@/types";
 
 export const ordersService = {
   async create(orderData: Omit<Order, "id" | "status" | "createdAt" | "updatedAt" | "riderId">) {
@@ -51,5 +53,13 @@ export const ordersService = {
 
   async cancel(orderId: string, actorId: string) {
     return cancelOrder(orderId, actorId);
+  },
+
+  async updatePriority(orderId: string, priority: OrderPriority) {
+    return updateOrderPriority(orderId, priority);
+  },
+
+  async updateLiveLocation(orderId: string, riderId: string, location: GeoLocation) {
+    return updateRiderLiveLocation(orderId, riderId, location);
   },
 };

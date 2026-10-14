@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { notificationsService } from "@/services/notifications.service";
+import { useAuth } from "@/contexts/auth-context";
 import { AppNotification } from "@/types";
 import { formatDateTime, formatRelativeTime } from "@/lib/utils";
 import { Bell, Radio, CheckCheck, ExternalLink, ShieldCheck } from "lucide-react";
@@ -9,17 +10,20 @@ import Link from "next/link";
 import { toast } from "sonner";
 
 export default function AdminNotificationsPage() {
+  const { user } = useAuth();
+  const [audience, setAudience] = useState<"all" | "riders">("all");
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [broadcastTitle, setBroadcastTitle] = useState("");
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
 
   useEffect(() => {
-    const unsub = notificationsService.subscribe("admin", (data) => {
+    if (!user) return;
+    const unsub = notificationsService.subscribe(user.uid, "admin", (data) => {
       setNotifications(data);
     });
     return () => unsub();
-  }, []);
+  }, [user]);
 
   const handleSendBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,12 +32,12 @@ export default function AdminNotificationsPage() {
     setBroadcasting(true);
     try {
       await notificationsService.create({
-        userId: "admin",
+        userId: audience,
         title: `[ALERT] ${broadcastTitle}`,
         message: broadcastMessage,
         type: "system",
       });
-      toast.success("Operations alert broadcasted to system feed!");
+      toast.success(audience === "all" ? "Alert sent to every user." : "Alert sent to all riders.");
       setBroadcastTitle("");
       setBroadcastMessage("");
     } catch (err: any) {
@@ -66,7 +70,21 @@ export default function AdminNotificationsPage() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Send To
+            </label>
+            <select
+              value={audience}
+              onChange={(e) => setAudience(e.target.value as "all" | "riders")}
+              className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+            >
+              <option value="all">Everyone (customers, riders, admins)</option>
+              <option value="riders">All riders</option>
+            </select>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Alert Subject

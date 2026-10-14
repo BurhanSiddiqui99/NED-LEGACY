@@ -6,7 +6,7 @@ import { Toaster } from "sonner";
 export const metadata: Metadata = {
   title: "LogiPulse — Last-Mile Courier & Delivery Management",
   description:
-    "Enterprise last-mile logistics management platform connecting customers, delivery riders, and operations administrators across Karachi.",
+    "Enterprise last-mile logistics management platform connecting customers, delivery riders, and operations administrators across Pakistan.",
 };
 
 export default function RootLayout({

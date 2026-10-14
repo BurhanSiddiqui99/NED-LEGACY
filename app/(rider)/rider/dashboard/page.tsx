@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { ordersService } from "@/services/orders.service";
 import { ridersService } from "@/services/riders.service";
 import { Order, GeoLocation } from "@/types";
-import { KARACHI_LOCATIONS } from "@/constants";
+import { PAKISTAN_LOCATIONS, getOrderPriority } from "@/constants";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { LocationSelector } from "@/components/rider/location-selector";
 import { OrderCard } from "@/components/orders/order-card";
@@ -29,8 +29,8 @@ export default function RiderDashboardPage() {
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
   const [myOrders, setMyOrders] = useState<Order[]>([]);
   const [currentLoc, setCurrentLoc] = useState<GeoLocation>({
-    latitude: riderProfile?.currentLocation?.latitude || KARACHI_LOCATIONS[0].latitude,
-    longitude: riderProfile?.currentLocation?.longitude || KARACHI_LOCATIONS[0].longitude,
+    latitude: riderProfile?.currentLocation?.latitude || PAKISTAN_LOCATIONS[0].latitude,
+    longitude: riderProfile?.currentLocation?.longitude || PAKISTAN_LOCATIONS[0].longitude,
   });
 
   // Subscribe to available unassigned orders
@@ -55,6 +55,8 @@ export default function RiderDashboardPage() {
   );
 
   const completedDeliveries = myOrders.filter((o) => o.status === "delivered");
+  const urgentAvailable = availableOrders.filter((o) => getOrderPriority(o) === "urgent").length;
+  const highAvailable = availableOrders.filter((o) => getOrderPriority(o) === "high").length;
 
   const handleLocationChange = async (newLoc: GeoLocation, name?: string) => {
     setCurrentLoc(newLoc);
@@ -99,7 +101,7 @@ export default function RiderDashboardPage() {
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
       </div>
 
-      {/* Location Selector (GPS / Karachi Preset) */}
+      {/* Location Selector (GPS / city hub preset) */}
       <LocationSelector
         currentLocation={currentLoc}
         onLocationChange={handleLocationChange}
@@ -148,7 +150,12 @@ export default function RiderDashboardPage() {
               Smart Nearby Pickup Feed ({availableOrders.length} available)
             </h3>
             <p className="text-xs text-slate-500">
-              Ranked dynamically by Haversine formula from your current position in Karachi.
+              Ranked by Haversine distance from your position and weighted by priority.
+              {(urgentAvailable > 0 || highAvailable > 0) && (
+                <span className="ml-1 font-bold text-red-600 dark:text-red-400">
+                  {urgentAvailable} urgent, {highAvailable} high priority waiting.
+                </span>
+              )}
             </p>
           </div>
         </div>

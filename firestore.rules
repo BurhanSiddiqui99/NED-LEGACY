@@ -29,6 +29,14 @@ service cloud.firestore {
       );
     }
 
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function validPriority(data) {
+      return !('priority' in data) || data.priority in ['normal', 'high', 'urgent'];
+    }
+
     // Users collection
     match /users/{userId} {
       // Authenticated users can read user profiles
@@ -49,14 +57,14 @@ service cloud.firestore {
     match /riders/{riderId} {
       allow read: if isAuthenticated();
 
-      // Registered rider can create and update their location and availability
+      // Registered rider can create and update their location, availability and delivery counter
       allow create: if isOwner(riderId);
-      allow update: if isOwner(riderId) && (
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['currentLocation', 'isAvailable', 'updatedAt'])
-      );
+      allow update: if isOwner(riderId) &&
+        changedKeys().hasOnly(['currentLocation', 'isAvailable', 'updatedAt', 'completedDeliveries']) &&
+        (!('completedDeliveries' in changedKeys()) ||
+          request.resource.data.completedDeliveries == resource.data.completedDeliveries + 1);
 
-      // Only admins can update verification status or completed count
+      // Only admins can update verification status
       allow update, delete: if isAdmin();
     }
 
@@ -70,81 +78,102 @@ service cloud.firestore {
         (isRider() && resource.data.status == 'pending' && resource.data.riderId == null)
       );
 
-      // Customers can create orders only for themselves with pending status
+      // Customers can create orders only for themselves with pending status and a valid priority
       allow create: if isAuthenticated() &&
         request.resource.data.customerId == request.auth.uid &&
         request.resource.data.status == 'pending' &&
-        request.resource.data.riderId == null;
+        request.resource.data.riderId == null &&
+        validPriority(request.resource.data);
 
       // Order update conditions:
       // 1. Rider accepting pending order
       // 2. Assigned rider advancing status (accepted -> picked_up -> in_transit -> delivered)
-      // 3. Customer cancelling their pending order
-      // 4. Admin full control
+      // 3. Assigned rider streaming live GPS location
+      // 4. Customer cancelling their pending order
+      // 5. Admin full control (incl. priority escalation)
       allow update: if isAuthenticated() && (
-        isAdmin() ||
+        (isAdmin() && validPriority(request.resource.data)) ||
         // Rider accepts order: order must be pending, riderId becomes request.auth.uid, status becomes accepted
         (
           isRider() &&
           resource.data.status == 'pending' &&
           resource.data.riderId == null &&
           request.resource.data.riderId == request.auth.uid &&
-          request.resource.data.status == 'accepted'
+          request.resource.data.status == 'accepted' &&
+          request.resource.data.get('priority', 'normal') == resource.data.get('priority', 'normal')
         ) ||
-        // Assigned rider updating progress
+        // Assigned rider updating progress (cannot touch priority, customer or price)
         (
-          resource.data.riderId == request.auth.uid && (
+          resource.data.riderId == request.auth.uid &&
+          changedKeys().hasOnly(['status', 'updatedAt', 'deliveredAt']) && (
             (resource.data.status == 'accepted' && request.resource.data.status == 'picked_up') ||
             (resource.data.status == 'picked_up' && request.resource.data.status == 'in_transit') ||
             (resource.data.status == 'in_transit' && request.resource.data.status == 'delivered')
           )
         ) ||
+        // Assigned rider sharing live location
+        (
+          resource.data.riderId == request.auth.uid &&
+          resource.data.status in ['accepted', 'picked_up', 'in_transit'] &&
+          changedKeys().hasOnly(['currentRiderLocation', 'riderLocationUpdatedAt'])
+        ) ||
         // Customer cancels their pending order
         (
           resource.data.customerId == request.auth.uid &&
           resource.data.status == 'pending' &&
-          request.resource.data.status == 'cancelled'
+          request.resource.data.status == 'cancelled' &&
+          changedKeys().hasOnly(['status', 'updatedAt'])
         )
       );
 
       allow delete: if isAdmin();
-    }
 
-    // Messages collection
-    match /messages/{messageId} {
-      // Only the sender or receiver can read the message, or admin
-      allow read: if isAuthenticated() && (
-        isAdmin() ||
-        resource.data.senderId == request.auth.uid ||
-        resource.data.receiverId == request.auth.uid
-      );
+      // Chat messages live under their order, so participants are checked against the parent order.
+      // orderId is a path variable here, which lets Firestore authorise the realtime list query.
+      match /messages/{messageId} {
+        function order() {
+          return get(/databases/$(database)/documents/orders/$(orderId)).data;
+        }
+        function isParticipant() {
+          return order().customerId == request.auth.uid || order().riderId == request.auth.uid;
+        }
 
-      // Only the sender can create a message for their order
-      allow create: if isAuthenticated() &&
-        request.resource.data.senderId == request.auth.uid &&
-        request.resource.data.text is string &&
-        request.resource.data.text.size() > 0 &&
-        request.resource.data.text.size() <= 2000;
+        allow read: if isAuthenticated() && (isAdmin() || isParticipant());
 
-      allow update, delete: if isAdmin();
+        allow create: if isAuthenticated() &&
+          (isAdmin() || isParticipant()) &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.orderId == orderId &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 &&
+          request.resource.data.text.size() <= 2000;
+
+        allow update, delete: if isAdmin();
+      }
     }
 
     // Notifications collection
+    // userId is either a user's uid or a shared inbox: 'admin', 'riders' or 'all'
     match /notifications/{notificationId} {
-      // Notifications are readable only by their recipients or admin
-      allow read: if isAuthenticated() && (
-        isAdmin() ||
-        resource.data.userId == request.auth.uid ||
-        resource.data.userId == 'all'
-      );
+      function canReadInbox(inbox) {
+        return inbox == request.auth.uid ||
+          inbox == 'all' ||
+          (inbox == 'riders' && isRider()) ||
+          isAdmin();
+      }
 
-      // System or users can trigger notifications
-      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && canReadInbox(resource.data.userId);
+
+      // Any signed-in user can trigger a notification (order events, chat messages)
+      allow create: if isAuthenticated() &&
+        request.resource.data.isRead == false &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() <= 200;
 
       // Recipient can mark notification as read
       allow update: if isAuthenticated() &&
-        (resource.data.userId == request.auth.uid || isAdmin()) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+        canReadInbox(resource.data.userId) &&
+        changedKeys().hasOnly(['isRead']);
 
       allow delete: if isAdmin();
     }

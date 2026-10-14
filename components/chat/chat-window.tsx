@@ -54,10 +54,20 @@ export function ChatWindow({ order, backHref }: ChatWindowProps) {
   useEffect(() => {
     if (!order.id) return;
 
-    const unsub = messagesService.subscribe(order.id, (msgs) => {
-      setMessages(msgs);
-      setLoading(false);
-    });
+    const unsub = messagesService.subscribe(
+      order.id,
+      (msgs) => {
+        setMessages(msgs);
+        setLoading(false);
+      },
+      (err) => {
+        toast.error(
+          err.message?.includes("permission")
+            ? "Chat blocked by Firestore rules. Publish the latest firestore.rules."
+            : "Chat connection lost. Retrying..."
+        );
+      }
+    );
 
     return () => unsub();
   }, [order.id]);
@@ -163,7 +173,7 @@ export function ChatWindow({ order, backHref }: ChatWindowProps) {
               Real-Time Courier Communication
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mt-1">
-              Send a message regarding pickup timing, Karachi landmarks, gate numbers, or delivery instructions.
+              Send a message regarding pickup timing, nearby landmarks, gate numbers, or delivery instructions.
             </p>
           </div>
         ) : (

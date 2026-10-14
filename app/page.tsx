@@ -41,7 +41,7 @@ export default function HomePage() {
                 LogiPulse
               </span>
               <span className="hidden sm:inline-block ml-2 text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-full border border-teal-200 dark:border-teal-800">
-                Karachi Delivery Hub
+                Pakistan Delivery Network
               </span>
             </div>
           </Link>
@@ -98,7 +98,7 @@ export default function HomePage() {
         {/* Badge */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-blue-50 to-teal-50 dark:from-blue-950/60 dark:to-teal-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 mb-6 shadow-sm">
           <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-          <span>Full-Stack Last-Mile Courier Platform • Karachi Delivery Hub</span>
+          <span>Full-Stack Last-Mile Courier Platform • Pakistan Delivery Network</span>
         </div>
 
         <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight max-w-4xl leading-tight">
@@ -106,7 +106,7 @@ export default function HomePage() {
         </h1>
 
         <p className="mt-5 text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-2xl leading-relaxed">
-          LogiPulse powers real-time deliveries across Karachi. Senders dispatch parcels with live Haversine distance pricing, motorcycle riders claim nearby assignments atomically, and administrators monitor live operations.
+          LogiPulse powers real-time deliveries across Pakistan. Senders dispatch parcels with live Haversine distance pricing, motorcycle riders claim nearby assignments atomically, and administrators monitor live operations.
         </p>
 
         {/* Primary Action Buttons */}
@@ -158,7 +158,7 @@ export default function HomePage() {
                   Customer Portal
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-                  Book courier delivery requests across Karachi with real coordinates, track live milestone timelines, and chat directly with your assigned rider.
+                  Book courier delivery requests anywhere in Pakistan with real coordinates, track live milestone timelines, and chat directly with your assigned rider.
                 </p>
               </div>
 
@@ -278,7 +278,7 @@ export default function HomePage() {
           <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
             <MapPin className="w-5 h-5 text-amber-600 mb-2" />
             <h5 className="font-bold text-xs text-slate-900 dark:text-white">
-              Karachi Landmarks
+              Pakistan City Hubs
             </h5>
             <p className="text-[11px] text-slate-500 mt-1">
               Verified geographic presets from NED University, Saddar, Clifton, to Nazimabad.

@@ -51,7 +51,7 @@ export default function CustomerDashboardPage() {
             Hello, {user?.fullName || "Courier Sender"}
           </h1>
           <p className="text-xs text-slate-200 max-w-xl">
-            Book rapid on-demand courier deliveries across Karachi, track live riders, and coordinate pickups seamlessly.
+            Book rapid on-demand courier deliveries across Pakistan, track live riders, and coordinate pickups seamlessly.
           </p>
         </div>
 

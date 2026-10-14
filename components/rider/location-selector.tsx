@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { KARACHI_LOCATIONS } from "@/constants";
+import { PAKISTAN_LOCATIONS } from "@/constants";
 import { GeoLocation } from "@/types";
 import { MapPin, Navigation, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -18,14 +18,14 @@ export function LocationSelector({
   const [detecting, setDetecting] = useState(false);
 
   // Find if current coordinates match a preset
-  const matchedPreset = KARACHI_LOCATIONS.find(
+  const matchedPreset = PAKISTAN_LOCATIONS.find(
     (l) =>
       Math.abs(l.latitude - currentLocation.latitude) < 0.005 &&
       Math.abs(l.longitude - currentLocation.longitude) < 0.005
   );
 
   const handlePresetSelect = (presetId: string) => {
-    const loc = KARACHI_LOCATIONS.find((l) => l.id === presetId);
+    const loc = PAKISTAN_LOCATIONS.find((l) => l.id === presetId);
     if (loc) {
       onLocationChange({ latitude: loc.latitude, longitude: loc.longitude }, loc.name);
       toast.success(`Rider location updated to: ${loc.name}`);
@@ -65,7 +65,7 @@ export function LocationSelector({
             Rider Live Position
           </span>
           <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-            {matchedPreset ? matchedPreset.name : "Custom GPS Location"} (
+            {matchedPreset ? `${matchedPreset.name}, ${matchedPreset.city}` : "Custom GPS Location"} (
             {currentLocation.latitude.toFixed(3)}, {currentLocation.longitude.toFixed(3)})
           </p>
         </div>
@@ -77,10 +77,14 @@ export function LocationSelector({
           onChange={(e) => handlePresetSelect(e.target.value)}
           className="flex-1 sm:flex-none text-xs px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20"
         >
-          {KARACHI_LOCATIONS.map((loc) => (
-            <option key={loc.id} value={loc.id}>
-              {loc.name}
-            </option>
+          {Array.from(new Set(PAKISTAN_LOCATIONS.map((l) => l.city))).map((city) => (
+            <optgroup key={city} label={city}>
+              {PAKISTAN_LOCATIONS.filter((l) => l.city === city).map((loc) => (
+                <option key={loc.id} value={loc.id}>
+                  {loc.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
           {!matchedPreset && <option value="custom">Device GPS Coords</option>}
         </select>

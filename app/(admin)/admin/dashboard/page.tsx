@@ -9,6 +9,7 @@ import { AppUser, Order, Rider } from "@/types";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { AnalyticsCharts } from "@/components/dashboard/analytics-chart";
 import { OrderTable } from "@/components/orders/order-table";
+import { PriorityAnalytics } from "@/components/dashboard/priority-analytics";
 import {
   Package,
   Users,
@@ -65,7 +66,7 @@ export default function AdminDashboardPage() {
             <ShieldCheck className="w-3.5 h-3.5 text-purple-400" /> Logistics Master Admin
           </div>
           <h1 className="text-xl md:text-2xl font-black tracking-tight">
-            Karachi Central Logistics Operations Center
+            LogiPulse Pakistan Operations Center
           </h1>
           <p className="text-xs text-slate-300 max-w-xl">
             Live operations overview across senders, active motorcycle couriers, delivery milestones, and fleet capacity.
@@ -123,7 +124,7 @@ export default function AdminDashboardPage() {
         <StatCard
           title="Active Deliveries"
           value={activeDeliveries}
-          subtitle="En route across Karachi"
+          subtitle="En route right now"
           icon={Truck}
           colorScheme="teal"
         />
@@ -135,6 +136,9 @@ export default function AdminDashboardPage() {
           colorScheme="emerald"
         />
       </div>
+
+      {/* Day 2: live NORMAL / HIGH / URGENT counts */}
+      <PriorityAnalytics orders={orders} />
 
       {/* Recharts Visualizations */}
       <AnalyticsCharts orders={orders} />

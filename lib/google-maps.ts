@@ -6,28 +6,44 @@ export const GOOGLE_MAPS_API_KEY =
   process.env.REACT_APP_GOOGLE_MAP_KEY ||
   "AIzaSyBleBgqr4FOUyij7NH2aoVbPtMNK9am0f8";
 
-export const KARACHI_DEFAULT_CENTER = {
-  lat: 24.8607,
-  lng: 67.0011,
+// Geographic centre of Pakistan, used when there is no better point to focus on
+export const PAKISTAN_DEFAULT_CENTER = {
+  lat: 30.3753,
+  lng: 69.3451,
 };
 
-export const KARACHI_BOUNDS = {
-  north: 25.30,
-  south: 24.70,
-  east: 67.50,
-  west: 66.75,
+export const PAKISTAN_DEFAULT_ZOOM = 5;
+
+// Bounding box covering all of Pakistan (incl. Gilgit-Baltistan and AJK)
+export const PAKISTAN_BOUNDS = {
+  north: 37.1,
+  south: 23.6,
+  east: 77.9,
+  west: 60.8,
 };
 
 /**
- * Validates strictly whether coordinates fall inside the Karachi, Pakistan metropolitan area
+ * Checks whether coordinates fall inside Pakistan's bounding box
  */
-export function isWithinKarachi(lat: number, lng: number): boolean {
+export function isWithinPakistan(lat: number, lng: number): boolean {
   return (
-    lat >= KARACHI_BOUNDS.south &&
-    lat <= KARACHI_BOUNDS.north &&
-    lng >= KARACHI_BOUNDS.west &&
-    lng <= KARACHI_BOUNDS.east
+    lat >= PAKISTAN_BOUNDS.south &&
+    lat <= PAKISTAN_BOUNDS.north &&
+    lng >= PAKISTAN_BOUNDS.west &&
+    lng <= PAKISTAN_BOUNDS.east
   );
+}
+
+/**
+ * Escapes user-provided text before it is placed inside InfoWindow HTML
+ */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /**

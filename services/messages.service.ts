@@ -13,7 +13,7 @@ export const messagesService = {
     return sendMessage(orderId, senderId, receiverId, text, senderName, senderRole);
   },
 
-  subscribe(orderId: string, callback: (messages: Message[]) => void) {
-    return subscribeToMessages(orderId, callback);
+  subscribe(orderId: string, callback: (messages: Message[]) => void, onError?: (err: Error) => void) {
+    return subscribeToMessages(orderId, callback, onError);
   },
 };

@@ -8,6 +8,7 @@ import { formatRelativeTime } from "@/lib/utils";
 import { Bell, CheckCheck, ExternalLink, Package, MessageSquare, Truck, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export function NotificationBell() {
   const { user } = useAuth();
@@ -15,6 +16,8 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  // IDs already shown to the user; null until the first snapshot so existing items don't pop up on page load
+  const seenIdsRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -22,12 +25,64 @@ export function NotificationBell() {
       return;
     }
 
-    const unsub = notificationsService.subscribe(user.uid, (notifs) => {
+    seenIdsRef.current = null;
+    const unsub = notificationsService.subscribe(user.uid, user.role, (notifs) => {
       setNotifications(notifs);
+
+      if (seenIdsRef.current === null) {
+        seenIdsRef.current = new Set(notifs.map((n) => n.id));
+        return;
+      }
+
+      const fresh = notifs.filter((n) => !n.isRead && !seenIdsRef.current!.has(n.id));
+      notifs.forEach((n) => seenIdsRef.current!.add(n.id));
+
+      fresh.slice(0, 3).forEach((n) => {
+        toast(n.title, {
+          description: n.message,
+          action: n.orderId
+            ? { label: "Open", onClick: () => openOrder(n.orderId!) }
+            : undefined,
+        });
+
+        // System notification when the tab is in the background
+        if (
+          typeof window !== "undefined" &&
+          "Notification" in window &&
+          Notification.permission === "granted" &&
+          document.visibilityState === "hidden"
+        ) {
+          try {
+            new Notification(n.title, { body: n.message, tag: n.id });
+          } catch {
+            // Some mobile browsers only allow notifications from a service worker
+          }
+        }
+      });
     });
 
     return () => unsub();
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, user?.role]);
+
+  const openOrder = (orderId: string) => {
+    if (user?.role === "customer") router.push(`/customer/orders/${orderId}`);
+    else if (user?.role === "rider") router.push(`/rider/deliveries/${orderId}`);
+    else router.push(`/admin/orders/${orderId}`);
+  };
+
+  const handleToggle = () => {
+    // Ask once, from a user gesture, so background tabs can show system notifications
+    if (
+      !open &&
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      Notification.permission === "default"
+    ) {
+      Notification.requestPermission().catch(() => {});
+    }
+    setOpen(!open);
+  };
 
   // Click outside to close
   useEffect(() => {
@@ -44,7 +99,7 @@ export function NotificationBell() {
 
   const handleMarkAllRead = async () => {
     if (!user) return;
-    await notificationsService.markAllAsRead(user.uid);
+    await notificationsService.markAllAsRead(user.uid, user.role);
   };
 
   const handleNotificationClick = async (notif: AppNotification) => {
@@ -53,12 +108,11 @@ export function NotificationBell() {
     }
     setOpen(false);
     if (notif.orderId && user) {
-      if (user.role === "customer") {
-        router.push(`/customer/orders/${notif.orderId}`);
-      } else if (user.role === "rider") {
-        router.push(`/rider/deliveries/${notif.orderId}`);
+      // Riders open new-request alerts from the nearby feed, since they are not assigned yet
+      if (user.role === "rider" && notif.type === "order_created") {
+        router.push("/rider/available-orders");
       } else {
-        router.push(`/admin/orders/${notif.orderId}`);
+        openOrder(notif.orderId);
       }
     }
   };
@@ -80,7 +134,7 @@ export function NotificationBell() {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={handleToggle}
         className="relative p-2 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none focus:ring-2 focus:ring-blue-500/20"
         aria-label="Notifications"
         title="Notifications"

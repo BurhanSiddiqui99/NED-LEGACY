@@ -1,5 +1,5 @@
 import { AppNotification, AppUser, Message, Order, Rider, UserRole } from "@/types";
-import { KARACHI_LOCATIONS } from "@/constants";
+import { PAKISTAN_LOCATIONS } from "@/constants";
 
 const STORAGE_KEYS = {
   USERS: "logipulse_mock_users",
@@ -8,7 +8,11 @@ const STORAGE_KEYS = {
   MESSAGES: "logipulse_mock_messages",
   NOTIFICATIONS: "logipulse_mock_notifications",
   AUTH_CURRENT: "logipulse_mock_current_user",
+  DATA_VERSION: "logipulse_mock_data_version",
 };
+
+// Bump when seed data shape changes so stale browsers get reseeded
+const DATA_VERSION = "3-priority";
 
 // Seed data
 const INITIAL_USERS: AppUser[] = [
@@ -58,8 +62,8 @@ const INITIAL_RIDERS: Rider[] = [
     isAvailable: true,
     isVerified: true,
     currentLocation: {
-      latitude: KARACHI_LOCATIONS[0].latitude, // NED University
-      longitude: KARACHI_LOCATIONS[0].longitude,
+      latitude: PAKISTAN_LOCATIONS[0].latitude, // NED University
+      longitude: PAKISTAN_LOCATIONS[0].longitude,
     },
     completedDeliveries: 42,
     createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
@@ -90,6 +94,7 @@ const INITIAL_ORDERS: Order[] = [
     packageWeight: 0.8,
     deliveryInstructions: "Please call on arrival and deliver to 2nd Floor office.",
     status: "pending",
+    priority: "normal",
     createdAt: new Date(Date.now() - 1000 * 60 * 18).toISOString(), // 18 mins ago
     updatedAt: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
     price: 350,
@@ -119,6 +124,8 @@ const INITIAL_ORDERS: Order[] = [
     packageWeight: 2.2,
     deliveryInstructions: "Handle with care, delicate fragile contents.",
     status: "in_transit",
+    priority: "high",
+    currentRiderLocation: { latitude: 24.842, longitude: 67.0641 },
     createdAt: new Date(Date.now() - 1000 * 60 * 65).toISOString(),
     updatedAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
     acceptedAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(),
@@ -149,11 +156,93 @@ const INITIAL_ORDERS: Order[] = [
     packageWeight: 4.5,
     deliveryInstructions: "Gate security entrance at Factory 4B.",
     status: "delivered",
+    priority: "normal",
     createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
     updatedAt: new Date(Date.now() - 86400000 * 2 + 1000 * 60 * 90).toISOString(),
     acceptedAt: new Date(Date.now() - 86400000 * 2 + 1000 * 60 * 15).toISOString(),
     deliveredAt: new Date(Date.now() - 86400000 * 2 + 1000 * 60 * 90).toISOString(),
     price: 780,
+  },
+  {
+    id: "LP-10421",
+    customerId: "demo-customer-uid",
+    customerName: "Ayesha Khan",
+    customerPhone: "+92 300 1234567",
+    riderId: null,
+    pickupAddress: "University Road opposite Expo Centre, Gulshan-e-Iqbal, Karachi",
+    deliveryAddress: "Khayaban-e-Bukhari, Phase 6, DHA, Karachi",
+    pickupLocation: { latitude: 24.9207, longitude: 67.0982 },
+    deliveryLocation: { latitude: 24.8055, longitude: 67.062 },
+    recipientName: "Dr. Sana Iqbal",
+    recipientPhone: "+92 333 1112233",
+    packageDescription: "Insulin cold-box (temperature sensitive medicine)",
+    packageWeight: 1.2,
+    deliveryInstructions: "Medicine, deliver immediately.",
+    status: "pending",
+    priority: "urgent",
+    createdAt: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
+    price: 820,
+  },
+  {
+    id: "LP-10734",
+    customerId: "demo-customer-uid",
+    customerName: "Ayesha Khan",
+    customerPhone: "+92 300 1234567",
+    riderId: null,
+    pickupAddress: "Block 15, Johar Chowrangi, Gulistan-e-Johar, Karachi",
+    deliveryAddress: "Tariq Road Shopping District, PECHS Block 2, Karachi",
+    pickupLocation: { latitude: 24.918, longitude: 67.135 },
+    deliveryLocation: { latitude: 24.8716, longitude: 67.0658 },
+    recipientName: "Bilal Raza",
+    recipientPhone: "+92 301 7778899",
+    packageDescription: "Laptop charger and office keys",
+    packageWeight: 0.6,
+    status: "pending",
+    priority: "high",
+    createdAt: new Date(Date.now() - 1000 * 60 * 9).toISOString(),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 9).toISOString(),
+    price: 560,
+  },
+  {
+    id: "LP-11208",
+    customerId: "demo-customer-uid",
+    customerName: "Ayesha Khan",
+    customerPhone: "+92 300 1234567",
+    riderId: null,
+    pickupAddress: "Block H, Hyderi Market, North Nazimabad, Karachi",
+    deliveryAddress: "Clifton Beach Avenue, Block 4, Clifton, Karachi",
+    pickupLocation: { latitude: 24.9392, longitude: 67.0425 },
+    deliveryLocation: { latitude: 24.8138, longitude: 67.0299 },
+    recipientName: "Hira Siddiqui",
+    recipientPhone: "+92 345 9988776",
+    packageDescription: "Clothing parcel (2 boxes)",
+    packageWeight: 3.0,
+    status: "pending",
+    priority: "normal",
+    createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+    price: 640,
+  },
+  {
+    id: "LP-12055",
+    customerId: "demo-customer-uid",
+    customerName: "Ayesha Khan",
+    customerPhone: "+92 300 1234567",
+    riderId: null,
+    pickupAddress: "Liberty Market, Gulberg III, Lahore",
+    deliveryAddress: "The Mall Road near Anarkali Bazaar, Lahore",
+    pickupLocation: { latitude: 31.5104, longitude: 74.3416 },
+    deliveryLocation: { latitude: 31.5656, longitude: 74.3142 },
+    recipientName: "Usman Tariq",
+    recipientPhone: "+92 322 4455661",
+    packageDescription: "Signed contract documents",
+    packageWeight: 0.3,
+    status: "pending",
+    priority: "urgent",
+    createdAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    price: 690,
   },
 ];
 
@@ -193,7 +282,7 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
   },
   {
     id: "notif-2",
-    userId: "demo-rider-uid",
+    userId: "riders",
     title: "New Nearby Delivery Available",
     message: "A new delivery request #LP-98214 was posted near NED University Campus.",
     type: "order_created",
@@ -243,6 +332,12 @@ function setItem<T>(key: string, value: T): void {
 export const MockStore = {
   init() {
     if (typeof window === "undefined") return;
+    if (localStorage.getItem(STORAGE_KEYS.DATA_VERSION) !== DATA_VERSION) {
+      [STORAGE_KEYS.RIDERS, STORAGE_KEYS.ORDERS, STORAGE_KEYS.MESSAGES, STORAGE_KEYS.NOTIFICATIONS].forEach((k) =>
+        localStorage.removeItem(k)
+      );
+      localStorage.setItem(STORAGE_KEYS.DATA_VERSION, DATA_VERSION);
+    }
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
     }
@@ -351,10 +446,10 @@ export const MockStore = {
   },
 
   // Notifications
-  getNotifications(userId?: string): AppNotification[] {
+  getNotifications(recipientIds?: string[]): AppNotification[] {
     const notifs = getItem<AppNotification[]>(STORAGE_KEYS.NOTIFICATIONS, INITIAL_NOTIFICATIONS);
-    if (userId) {
-      return notifs.filter((n) => n.userId === userId);
+    if (recipientIds) {
+      return notifs.filter((n) => recipientIds.includes(n.userId));
     }
     return notifs;
   },
@@ -368,9 +463,9 @@ export const MockStore = {
     const updated = notifs.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n));
     setItem(STORAGE_KEYS.NOTIFICATIONS, updated);
   },
-  markAllNotificationsRead(userId: string) {
+  markAllNotificationsRead(recipientIds: string[]) {
     const notifs = getItem<AppNotification[]>(STORAGE_KEYS.NOTIFICATIONS, INITIAL_NOTIFICATIONS);
-    const updated = notifs.map((n) => (n.userId === userId ? { ...n, isRead: true } : n));
+    const updated = notifs.map((n) => (recipientIds.includes(n.userId) ? { ...n, isRead: true } : n));
     setItem(STORAGE_KEYS.NOTIFICATIONS, updated);
   },
 
