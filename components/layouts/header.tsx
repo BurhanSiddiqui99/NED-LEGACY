@@ -111,7 +111,7 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
           title={
             isConfigured
               ? "Connected to Google Cloud Firestore & Firebase Auth"
-              : "Running in Hackathon Reactive Local Live Mode"
+              : "Running in Offline Local Storage Mode"
           }
         >
           {isConfigured ? (
@@ -122,7 +122,7 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
           ) : (
             <>
               <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-              <span className="text-teal-700 dark:text-teal-300">Live Hackathon Mode</span>
+              <span className="text-teal-700 dark:text-teal-300">Offline Local Mode</span>
             </>
           )}
         </div>

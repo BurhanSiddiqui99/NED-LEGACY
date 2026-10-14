@@ -67,7 +67,7 @@ export default function AdminSettingsPage() {
             <div className="flex items-center justify-between">
               <span className="text-slate-500">Active Mode:</span>
               <span className="font-bold text-slate-900 dark:text-white">
-                {isFirebaseConfigured ? "Google Cloud Firestore" : "Hackathon Local Live Mode"}
+                {isFirebaseConfigured ? "Google Cloud Firestore" : "Local Database Mode"}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -81,21 +81,21 @@ export default function AdminSettingsPage() {
           </div>
 
           <p className="text-[11px] text-slate-400 leading-relaxed">
-            To link your custom Google Cloud Firebase project, populate your credentials inside <code>.env.local</code> as specified in the README.
+            To link your custom Google Cloud Firebase project, populate your credentials inside <code>.env.local</code>.
           </p>
         </div>
 
-        {/* Presentation Seed & Reset Card */}
+        {/* Database State Reset Card */}
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 flex flex-col justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
               <RotateCcw className="w-4 h-4" />
               <h2 className="font-bold text-sm text-slate-900 dark:text-white">
-                Hackathon Live Demo Reset
+                Initial Orders & Fleet Reset
               </h2>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed">
-              If you want to rehearse the full end-to-end delivery presentation from scratch (Step 1 Customer Login through Step 9 Admin Analytics), click below to restore initial seed orders and riders.
+              Restore initial seed orders and riders across Karachi hubs for testing delivery workflows.
             </p>
           </div>
 
@@ -104,7 +104,7 @@ export default function AdminSettingsPage() {
             className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Demo Orders & State</span>
+            <span>Reset Initial Orders & State</span>
           </button>
         </div>
       </div>
