@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
-import { DEMO_ACCOUNTS } from "@/constants";
 import {
   Mail,
   Lock,
@@ -11,12 +10,6 @@ import {
   EyeOff,
   ArrowRight,
   Loader2,
-  Sparkles,
-  ShieldCheck,
-  Bike,
-  User,
-  ChevronDown,
-  ChevronUp,
   AlertCircle,
   X,
 } from "lucide-react";
@@ -31,7 +24,6 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showDemoOptions, setShowDemoOptions] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,20 +48,6 @@ export function LoginForm() {
     }
   };
 
-  const handleQuickDemoLogin = async (demo: (typeof DEMO_ACCOUNTS)[0]) => {
-    setApiError(null);
-    setEmail(demo.email);
-    setPassword(demo.password);
-    setLoading(true);
-    try {
-      const loggedUser = await login(demo.email, demo.password);
-      router.push(`/${loggedUser.role}/dashboard`);
-    } catch (err: any) {
-      setApiError(err.message || "Failed to sign in with demo credentials.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -177,44 +155,6 @@ export function LoginForm() {
         >
           Register as Customer or Rider
         </Link>
-      </div>
-
-      {/* Optional Demo Accounts Accordion */}
-      <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={() => setShowDemoOptions(!showDemoOptions)}
-          className="w-full flex items-center justify-between text-[11px] font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 py-1 transition"
-        >
-          <span className="flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-            Quick Test Accounts (Optional)
-          </span>
-          {showDemoOptions ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        </button>
-
-        {showDemoOptions && (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {DEMO_ACCOUNTS.map((d) => (
-              <button
-                key={d.role}
-                type="button"
-                onClick={() => handleQuickDemoLogin(d)}
-                className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500 text-left transition shadow-sm hover:shadow group"
-              >
-                <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-white group-hover:text-blue-600">
-                  {d.role === "customer" && <User className="w-3.5 h-3.5 text-blue-500" />}
-                  {d.role === "rider" && <Bike className="w-3.5 h-3.5 text-amber-500" />}
-                  {d.role === "admin" && <ShieldCheck className="w-3.5 h-3.5 text-purple-500" />}
-                  <span className="capitalize">{d.role}</span>
-                </div>
-                <span className="text-[10px] text-slate-400 block truncate mt-0.5">
-                  {d.name.split(" ")[0]}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

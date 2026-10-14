@@ -3,22 +3,19 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { UserRole } from "@/types";
-import { DEMO_ACCOUNTS } from "@/constants";
 import {
   User,
   LogOut,
   ChevronDown,
-  Sparkles,
   ShieldCheck,
   Bike,
   UserCircle,
-  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export function UserAvatarMenu() {
-  const { user, role, logout, switchDemoRole } = useAuth();
+  const { user, role, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -67,11 +64,6 @@ export function UserAvatarMenu() {
     }
   };
 
-  const handleRoleSwitch = async (targetRole: UserRole) => {
-    await switchDemoRole(targetRole);
-    setOpen(false);
-    router.push(`/${targetRole}/dashboard`);
-  };
 
   const handleLogout = async () => {
     setOpen(false);
@@ -114,27 +106,6 @@ export function UserAvatarMenu() {
               {user.fullName}
             </p>
             <p className="text-xs text-slate-500 truncate">{user.email}</p>
-          </div>
-
-          <div className="p-2 border-b border-slate-100 dark:border-slate-800">
-            <div className="px-2 py-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5 text-blue-500" /> Hackathon Demo Switcher
-            </div>
-            <div className="grid grid-cols-3 gap-1 px-1">
-              {DEMO_ACCOUNTS.map((d) => (
-                <button
-                  key={d.role}
-                  onClick={() => handleRoleSwitch(d.role)}
-                  className={`px-2 py-1.5 text-xs font-medium rounded-lg text-center transition ${
-                    role === d.role
-                      ? "bg-[#142B49] text-white shadow-sm"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                  }`}
-                >
-                  {d.role.charAt(0).toUpperCase() + d.role.slice(1)}
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="p-2 space-y-1">

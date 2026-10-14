@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { UserRole } from "@/types";
-import { DEMO_ACCOUNTS } from "@/constants";
 import {
   LayoutDashboard,
   PackagePlus,
@@ -17,7 +16,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
   ShieldAlert,
   Radio,
   Power,
@@ -32,7 +30,7 @@ interface SidebarProps {
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
-  const { user, role, switchDemoRole, riderProfile, updateRiderAvailability } = useAuth();
+  const { user, role, riderProfile, updateRiderAvailability } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
   const getNavLinks = () => {
@@ -247,33 +245,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         })}
       </div>
 
-      {/* Role Switcher in Sidebar Footer */}
-      {!collapsed && (
-        <div className="p-4 mx-3 mb-3 rounded-2xl bg-slate-800/80 border border-slate-700/60">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-teal-400 uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> Demo Role Switcher
-          </div>
-          <div className="grid grid-cols-3 gap-1">
-            {DEMO_ACCOUNTS.map((d) => (
-              <button
-                key={d.role}
-                onClick={() => switchDemoRole(d.role)}
-                className={`py-1.5 px-2 rounded-lg text-[11px] font-semibold text-center transition ${
-                  role === d.role
-                    ? "bg-[#2563EB] text-white shadow"
-                    : "bg-slate-700/60 hover:bg-slate-700 text-slate-300"
-                }`}
-              >
-                {d.role.charAt(0).toUpperCase() + d.role.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Desktop Collapse Trigger */}
       <div className="hidden md:flex items-center justify-between px-4 py-3 border-t border-slate-700/60 text-slate-400 text-xs">
-        {!collapsed && <span className="text-[11px]">NED Hackathon Edition</span>}
+        {!collapsed && <span className="text-[11px] text-slate-400">LogiPulse Platform</span>}
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
