@@ -580,7 +580,8 @@ export async function sendMessage(
   senderId: string,
   receiverId: string,
   text: string,
-  senderName?: string
+  senderName?: string,
+  senderRole?: "customer" | "rider" | "admin"
 ): Promise<Message> {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -594,6 +595,7 @@ export async function sendMessage(
     senderId,
     receiverId,
     senderName,
+    senderRole,
     text: trimmed,
     createdAt: (isFirebaseConfigured ? serverTimestamp() : new Date().toISOString()) as any,
     isRead: false,
@@ -601,6 +603,22 @@ export async function sendMessage(
 
   if (isFirebaseConfigured && db) {
     await setDoc(doc(db, "messages", msgId), newMsg);
+
+    // Create real-time notification for recipient in Firestore
+    if (receiverId && receiverId !== "admin") {
+      try {
+        await createNotification({
+          userId: receiverId,
+          title: `New Message from ${senderName || "Partner"}`,
+          message: trimmed.length > 60 ? trimmed.substring(0, 57) + "..." : trimmed,
+          type: "new_message",
+          orderId,
+        });
+      } catch (e) {
+        console.warn("Notification trigger notice:", e);
+      }
+    }
+
     return newMsg;
   }
 
@@ -609,17 +627,19 @@ export async function sendMessage(
     createdAt: new Date().toISOString(),
   });
 
-  // Notify receiver
-  MockStore.addNotification({
-    id: "notif-" + Math.random().toString(36).substring(2, 9),
-    userId: receiverId,
-    title: `New Message from ${senderName || "Delivery Partner"}`,
-    message: trimmed.length > 50 ? trimmed.substring(0, 47) + "..." : trimmed,
-    type: "new_message",
-    orderId,
-    isRead: false,
-    createdAt: new Date().toISOString(),
-  });
+  // Notify receiver in mock
+  if (receiverId) {
+    MockStore.addNotification({
+      id: "notif-" + Math.random().toString(36).substring(2, 9),
+      userId: receiverId,
+      title: `New Message from ${senderName || "Delivery Partner"}`,
+      message: trimmed.length > 50 ? trimmed.substring(0, 47) + "..." : trimmed,
+      type: "new_message",
+      orderId,
+      isRead: false,
+      createdAt: new Date().toISOString(),
+    });
+  }
 
   return newMsg;
 }

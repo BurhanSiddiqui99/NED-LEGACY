@@ -80,6 +80,7 @@ export interface Message {
   orderId: string;
   senderId: string;
   senderName?: string;
+  senderRole?: "customer" | "rider" | "admin";
   receiverId: string;
   text: string;
   createdAt: Timestamp | string | number | Date;

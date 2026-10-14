@@ -11,6 +11,64 @@ export const KARACHI_DEFAULT_CENTER = {
   lng: 67.0011,
 };
 
+export const KARACHI_BOUNDS = {
+  north: 25.30,
+  south: 24.70,
+  east: 67.50,
+  west: 66.75,
+};
+
+/**
+ * Validates strictly whether coordinates fall inside the Karachi, Pakistan metropolitan area
+ */
+export function isWithinKarachi(lat: number, lng: number): boolean {
+  return (
+    lat >= KARACHI_BOUNDS.south &&
+    lat <= KARACHI_BOUNDS.north &&
+    lng >= KARACHI_BOUNDS.west &&
+    lng <= KARACHI_BOUNDS.east
+  );
+}
+
+/**
+ * Calculates real driving distance and duration between two coordinates using Google Maps Distance Matrix
+ */
+export async function getGoogleDrivingDistance(
+  origin: GeoLocation,
+  destination: GeoLocation
+): Promise<{ distanceKm: number; durationText: string } | null> {
+  try {
+    const googleMaps = await loadGoogleMaps();
+    return new Promise((resolve) => {
+      const service = new googleMaps.DistanceMatrixService();
+      service.getDistanceMatrix(
+        {
+          origins: [{ lat: origin.latitude, lng: origin.longitude }],
+          destinations: [{ lat: destination.latitude, lng: destination.longitude }],
+          travelMode: googleMaps.TravelMode.DRIVING,
+          unitSystem: googleMaps.UnitSystem.METRIC,
+        },
+        (response, status) => {
+          if (
+            status === "OK" &&
+            response?.rows?.[0]?.elements?.[0]?.status === "OK"
+          ) {
+            const element = response.rows[0].elements[0];
+            const distanceKm = Math.round((element.distance.value / 1000) * 10) / 10;
+            const durationText = element.duration.text;
+            resolve({ distanceKm, durationText });
+          } else {
+            resolve(null);
+          }
+        }
+      );
+    });
+  } catch (err) {
+    console.warn("Google Distance Matrix calculation notice:", err);
+    return null;
+  }
+}
+
 let googleMapsPromise: Promise<typeof google.maps> | null = null;
 
 /**

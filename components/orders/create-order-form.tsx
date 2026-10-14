@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { GooglePlaceSearchInput } from "@/components/maps/google-place-search-input";
 import { GoogleMapTracker } from "@/components/maps/google-map-tracker";
+import { getGoogleDrivingDistance } from "@/lib/google-maps";
 
 export function CreateOrderForm() {
   const router = useRouter();
@@ -96,14 +97,39 @@ export function CreateOrderForm() {
   };
 
   // Live distance and pricing calculation
-  const distanceKm = calculateDistance(
+  const [googleDistance, setGoogleDistance] = useState<number | null>(null);
+  const [googleDuration, setGoogleDuration] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getGoogleDrivingDistance(pickupCoords, deliveryCoords).then((res) => {
+      if (active && res) {
+        setGoogleDistance(res.distanceKm);
+        setGoogleDuration(res.durationText);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [
     pickupCoords.latitude,
     pickupCoords.longitude,
     deliveryCoords.latitude,
-    deliveryCoords.longitude
-  );
+    deliveryCoords.longitude,
+  ]);
 
-  const estimatedMinutes = estimateTravelTimeMinutes(distanceKm);
+  // Use real Google Maps driving road distance if available, otherwise high-precision Haversine
+  const distanceKm =
+    googleDistance ??
+    calculateDistance(
+      pickupCoords.latitude,
+      pickupCoords.longitude,
+      deliveryCoords.latitude,
+      deliveryCoords.longitude
+    );
+
+  const estimatedMinutes =
+    googleDuration ?? `~${estimateTravelTimeMinutes(distanceKm)} mins`;
   const weightNum = parseFloat(packageWeight) || 1;
   // Karachi Courier Rate: Base PKR 150 + 35 PKR/km + 25 PKR/kg
   const estimatedPrice = Math.round(150 + distanceKm * 35 + weightNum * 25);
@@ -357,7 +383,9 @@ export function CreateOrderForm() {
             {/* Distance calculation metrics */}
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500">Haversine Distance:</span>
+                <span className="text-slate-500">
+                  {googleDistance ? "Google Road Distance:" : "Karachi Distance:"}
+                </span>
                 <span className="font-bold text-slate-900 dark:text-white text-sm">
                   {formatDistance(distanceKm)}
                 </span>
@@ -365,7 +393,7 @@ export function CreateOrderForm() {
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500">Estimated Transit Time:</span>
                 <span className="font-semibold text-teal-600 dark:text-teal-400">
-                  ~{estimatedMinutes} mins
+                  {estimatedMinutes}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs">

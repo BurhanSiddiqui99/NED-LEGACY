@@ -21,6 +21,7 @@ import {
   Power,
   Navigation2,
   X,
+  MessageSquare,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -54,6 +55,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             icon: Package,
           },
           {
+            href: "/customer/messages",
+            label: "Courier Chats",
+            icon: MessageSquare,
+          },
+          {
             href: "/customer/notifications",
             label: "Notifications",
             icon: Bell,
@@ -84,6 +90,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             icon: Package,
           },
           {
+            href: "/rider/messages",
+            label: "Customer Chats",
+            icon: MessageSquare,
+          },
+          {
             href: "/rider/notifications",
             label: "Notifications",
             icon: Bell,
@@ -106,6 +117,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             href: "/admin/orders",
             label: "All Orders",
             icon: Package,
+          },
+          {
+            href: "/admin/messages",
+            label: "Live Chat Dispatch",
+            icon: MessageSquare,
           },
           {
             href: "/admin/users",

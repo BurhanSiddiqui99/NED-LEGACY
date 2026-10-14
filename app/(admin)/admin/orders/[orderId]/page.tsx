@@ -19,6 +19,7 @@ import {
   Loader2,
   ShieldCheck,
   Calendar,
+  MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
 import { GoogleMapTracker } from "@/components/maps/google-map-tracker";
@@ -95,6 +96,14 @@ export default function AdminOrderDetailPage() {
             </p>
           </div>
         </div>
+
+        <Link
+          href={`/admin/messages/${order.id}`}
+          className="py-2 px-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span>Open Real-Time Chat</span>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
