@@ -68,14 +68,14 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
       <div className="flex items-center gap-3">
         <button
           onClick={onMobileMenuToggle}
-          className="p-2 -ml-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 md:hidden"
+          className="p-2 -ml-2 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 md:hidden transition"
           aria-label="Open sidebar"
         >
           <Menu className="w-5 h-5" />
         </button>
 
         {/* Breadcrumb Navigation */}
-        <nav className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+        <nav className="hidden sm:flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
           <Link
             href={`/${role || "dashboard"}`}
             className="font-medium hover:text-slate-900 dark:hover:text-white transition flex items-center gap-1"
@@ -85,7 +85,7 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
           </Link>
           {breadcrumbs.map((crumb, idx) => (
             <React.Fragment key={crumb.url}>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-600" />
               {crumb.isLast ? (
                 <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[140px] sm:max-w-[200px]">
                   {crumb.label}
@@ -103,36 +103,14 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
         </nav>
       </div>
 
-      {/* Right: Cloud status + Role badge + Notification + Theme toggle + Avatar */}
+      {/* Right: Role badge + Notification + Theme toggle + Avatar */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Firebase Live Status */}
-        <div
-          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border cursor-default"
-          title={
-            isConfigured
-              ? "Connected to Google Cloud Firestore & Firebase Auth"
-              : "Running in Offline Local Storage Mode"
-          }
-        >
-          {isConfigured ? (
-            <>
-              <Cloud className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-emerald-700 dark:text-emerald-400">Firebase Cloud Active</span>
-            </>
-          ) : (
-            <>
-              <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-              <span className="text-teal-700 dark:text-teal-300">Offline Local Mode</span>
-            </>
-          )}
-        </div>
-
         {/* Current Role Indicator */}
         {role && (
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-            {role === "customer" && <User className="w-3.5 h-3.5 text-blue-500" />}
-            {role === "rider" && <Bike className="w-3.5 h-3.5 text-amber-500" />}
-            {role === "admin" && <ShieldCheck className="w-3.5 h-3.5 text-purple-500" />}
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 shadow-sm">
+            {role === "customer" && <User className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+            {role === "rider" && <Bike className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
+            {role === "admin" && <ShieldCheck className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />}
             <span className="capitalize">{role}</span>
           </div>
         )}
@@ -143,10 +121,15 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
         {/* Theme Toggle Button */}
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none"
+          className="p-2 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none"
           aria-label="Toggle theme"
+          title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
         >
-          {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+          {isDark ? (
+            <Sun className="w-4 h-4 text-amber-400 stroke-[2.2]" />
+          ) : (
+            <Moon className="w-4 h-4 text-slate-700 stroke-[2.2]" />
+          )}
         </button>
 
         {/* User Avatar Menu */}

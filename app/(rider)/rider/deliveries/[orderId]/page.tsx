@@ -213,7 +213,7 @@ export default function RiderDeliveryDetailPage() {
           {/* Package Specs */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
             <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <Package className="w-4 h-4 text-slate-400" /> Package Info
+              <Package className="w-4 h-4 text-slate-500 dark:text-slate-400 stroke-[2.2]" /> Package Info
             </h3>
 
             <div className="space-y-2 text-xs">

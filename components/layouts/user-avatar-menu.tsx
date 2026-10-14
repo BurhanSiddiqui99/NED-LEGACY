@@ -92,7 +92,7 @@ export function UserAvatarMenu() {
           </span>
           <span className="text-[10px] text-slate-500 capitalize">{user.role}</span>
         </div>
-        <ChevronDown className="w-4 h-4 text-slate-400 hidden sm:block" />
+        <ChevronDown className="w-4 h-4 text-slate-500 dark:text-slate-400 hidden sm:block" />
       </button>
 
       {open && (
@@ -114,7 +114,7 @@ export function UserAvatarMenu() {
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition"
             >
-              <User className="w-4 h-4 text-slate-400" />
+              <User className="w-4 h-4 text-slate-500 dark:text-slate-400 stroke-[2.2]" />
               Manage Profile & Details
             </Link>
 
@@ -122,7 +122,7 @@ export function UserAvatarMenu() {
               onClick={handleLogout}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-4 h-4 text-red-600 dark:text-red-400 stroke-[2.2]" />
               Sign Out
             </button>
           </div>

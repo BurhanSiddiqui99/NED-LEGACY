@@ -96,13 +96,13 @@ export function OrderTimeline({ order }: OrderTimelineProps) {
                       ? "bg-emerald-600 text-white ring-4 ring-emerald-100 dark:ring-emerald-950"
                       : isCurrent
                       ? "bg-[#2563EB] text-white ring-4 ring-blue-100 dark:ring-blue-950 animate-pulse"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-300 dark:border-slate-700"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
                   }`}
                 >
                   {isCompleted ? (
                     <Check className="w-4 h-4 stroke-[3]" />
                   ) : (
-                    <Icon className="w-4 h-4" />
+                    <Icon className="w-4 h-4 stroke-[2.2]" />
                   )}
                 </div>
 

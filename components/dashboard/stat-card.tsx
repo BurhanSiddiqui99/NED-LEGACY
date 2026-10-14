@@ -24,11 +24,11 @@ export function StatCard({
   colorScheme = "blue",
 }: StatCardProps) {
   const colorMap = {
-    blue: "from-blue-600 to-indigo-600 text-blue-600 bg-blue-50 dark:bg-blue-950/60",
-    teal: "from-teal-600 to-emerald-600 text-teal-600 bg-teal-50 dark:bg-teal-950/60",
-    amber: "from-amber-500 to-orange-500 text-amber-600 bg-amber-50 dark:bg-amber-950/60",
-    purple: "from-purple-600 to-pink-600 text-purple-600 bg-purple-50 dark:bg-purple-950/60",
-    emerald: "from-emerald-600 to-teal-600 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60",
+    blue: "bg-blue-100 text-blue-600 dark:bg-blue-950/70 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/40",
+    teal: "bg-teal-100 text-teal-700 dark:bg-teal-950/70 dark:text-teal-400 border border-teal-200/60 dark:border-teal-900/40",
+    amber: "bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/40",
+    purple: "bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-400 border border-purple-200/60 dark:border-purple-900/40",
+    emerald: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/40",
   };
 
   return (
@@ -44,9 +44,9 @@ export function StatCard({
         </div>
 
         <div
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${colorMap[colorScheme]}`}
+          className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${colorMap[colorScheme]}`}
         >
-          <Icon className="w-6 h-6 text-white" />
+          <Icon className="w-6 h-6 stroke-[2.2]" />
         </div>
       </div>
 

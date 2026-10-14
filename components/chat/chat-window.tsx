@@ -124,7 +124,7 @@ export function ChatWindow({ order, backHref }: ChatWindowProps) {
                 Live Chat
               </span>
             </div>
-            <div className="flex items-center gap-2 text-[10px] text-slate-400">
+            <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
               <span>Order #{order.id}</span>
               {receiverPhone && (
                 <>
@@ -144,9 +144,9 @@ export function ChatWindow({ order, backHref }: ChatWindowProps) {
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-5 bg-slate-50/40 dark:bg-slate-950/40">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 p-6">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3 text-slate-400">
-              <MessageSquare className="w-6 h-6" />
+          <div className="h-full flex flex-col items-center justify-center text-center text-slate-500 dark:text-slate-400 p-6">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3 text-slate-500 dark:text-slate-400">
+              <MessageSquare className="w-6 h-6 stroke-[2]" />
             </div>
             <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
               Direct Courier Conversation

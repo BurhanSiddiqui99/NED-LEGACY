@@ -65,7 +65,7 @@ export function OrderTable({
       <div className="p-4 md:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         {/* Search */}
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-500 dark:text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchTerm}
@@ -77,7 +77,7 @@ export function OrderTable({
 
         {/* Status Filter Chips */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-          <Filter className="w-3.5 h-3.5 text-slate-400 mr-1 shrink-0 hidden sm:block" />
+          <Filter className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 mr-1 shrink-0 hidden sm:block" />
           {statusOptions.map((opt) => (
             <button
               key={opt.value}
@@ -97,7 +97,7 @@ export function OrderTable({
       {/* Orders Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider text-[11px]">
+          <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider text-[11px]">
             <tr>
               <th className="py-3.5 px-4">Order ID</th>
               {showCustomerCol && <th className="py-3.5 px-4">Customer</th>}
@@ -111,7 +111,7 @@ export function OrderTable({
               >
                 <div className="flex items-center gap-1">
                   <span>Created</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                  <ArrowUpDown className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                 </div>
               </th>
               <th className="py-3.5 px-4 text-right">Actions</th>

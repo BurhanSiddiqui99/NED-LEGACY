@@ -57,11 +57,11 @@ export function LocationSelector({
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
       <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
-          <MapPin className="w-4 h-4" />
+        <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-700 dark:bg-teal-950/70 dark:text-teal-400 border border-teal-200/60 dark:border-teal-900/40 flex items-center justify-center shrink-0">
+          <MapPin className="w-4 h-4 stroke-[2.2]" />
         </div>
         <div>
-          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
+          <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider block">
             Rider Live Position
           </span>
           <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
@@ -95,7 +95,7 @@ export function LocationSelector({
           {detecting ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : (
-            <Navigation className="w-3.5 h-3.5 text-blue-500" />
+            <Navigation className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 stroke-[2.2]" />
           )}
           <span>GPS</span>
         </button>

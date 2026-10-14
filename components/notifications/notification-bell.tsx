@@ -66,14 +66,14 @@ export function NotificationBell() {
   const getIcon = (type: string) => {
     switch (type) {
       case "order_created":
-        return <Package className="w-4 h-4 text-blue-500" />;
+        return <Package className="w-4 h-4 text-blue-600 dark:text-blue-400 stroke-[2.2]" />;
       case "order_accepted":
       case "status_updated":
-        return <Truck className="w-4 h-4 text-teal-500" />;
+        return <Truck className="w-4 h-4 text-teal-600 dark:text-teal-400 stroke-[2.2]" />;
       case "new_message":
-        return <MessageSquare className="w-4 h-4 text-purple-500" />;
+        return <MessageSquare className="w-4 h-4 text-purple-600 dark:text-purple-400 stroke-[2.2]" />;
       default:
-        return <AlertCircle className="w-4 h-4 text-amber-500" />;
+        return <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 stroke-[2.2]" />;
     }
   };
 
@@ -81,10 +81,11 @@ export function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="relative p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+        className="relative p-2 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none focus:ring-2 focus:ring-blue-500/20"
         aria-label="Notifications"
+        title="Notifications"
       >
-        <Bell className="w-5 h-5" />
+        <Bell className="w-5 h-5 stroke-[2.2]" />
         {unreadCount > 0 && (
           <span className="absolute top-1 right-1 flex items-center justify-center min-w-4 h-4 px-1 text-[10px] font-bold text-white bg-red-500 rounded-full animate-pulse">
             {unreadCount > 9 ? "9+" : unreadCount}

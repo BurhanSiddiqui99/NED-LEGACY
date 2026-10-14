@@ -47,11 +47,11 @@ export function OrderCard({ order, rolePrefix = "/customer" }: OrderCardProps) {
       {/* Route Info */}
       <div className="py-3.5 space-y-2.5">
         <div className="flex items-start gap-2.5 text-xs">
-          <div className="w-5 h-5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+          <div className="w-5 h-5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
             <MapPin className="w-3.5 h-3.5" />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
               Pickup From
             </span>
             <p className="font-medium text-slate-800 dark:text-slate-200 truncate">
@@ -61,11 +61,11 @@ export function OrderCard({ order, rolePrefix = "/customer" }: OrderCardProps) {
         </div>
 
         <div className="flex items-start gap-2.5 text-xs">
-          <div className="w-5 h-5 rounded-md bg-teal-50 dark:bg-teal-950/60 text-teal-600 flex items-center justify-center shrink-0 mt-0.5">
+          <div className="w-5 h-5 rounded-md bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-400 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
             <ArrowRight className="w-3.5 h-3.5" />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
               Deliver To
             </span>
             <p className="font-medium text-slate-800 dark:text-slate-200 truncate">
@@ -76,10 +76,10 @@ export function OrderCard({ order, rolePrefix = "/customer" }: OrderCardProps) {
       </div>
 
       {/* Package & Recipient */}
-      <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3 mb-3 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+      <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3 mb-3 text-xs text-slate-600 dark:text-slate-300 space-y-1 border border-slate-100 dark:border-transparent">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 font-medium truncate">
-            <Package className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <Package className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
             {order.packageDescription}
           </span>
           {order.packageWeight && (

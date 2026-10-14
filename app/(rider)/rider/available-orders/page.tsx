@@ -138,7 +138,7 @@ export default function AvailableOrdersPage() {
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         {/* Search */}
         <div className="relative flex-1 max-w-sm">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-500 dark:text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
@@ -150,8 +150,8 @@ export default function AvailableOrdersPage() {
 
         {/* Distance Filter Chips */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-          <span className="text-xs font-semibold text-slate-400 mr-1 flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5" /> Radius:
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" /> Radius:
           </span>
           {[
             { id: "all", label: "All Karachi" },
@@ -175,8 +175,8 @@ export default function AvailableOrdersPage() {
 
         {/* Sort selector */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-xs font-semibold text-slate-400 flex items-center gap-1">
-            <ArrowUpDown className="w-3.5 h-3.5" /> Sort:
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+            <ArrowUpDown className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" /> Sort:
           </span>
           <select
             value={sortBy}
