@@ -131,7 +131,7 @@ export default function AdminOrderDetailPage() {
           className="self-start sm:self-auto py-2 px-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
         >
           <MessageSquare className="w-4 h-4" />
-          <span>Open Real-Time Chat</span>
+          <span>Chat</span>
         </Link>
       </div>
 

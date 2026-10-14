@@ -107,7 +107,7 @@ export default function CustomerMessagesHubPage() {
               <ChatButton
                 order={order}
                 href={`/customer/messages/${order.id}`}
-                label="Open Real-Time Chat"
+                label="Chat"
                 className="w-full py-2.5 px-4 bg-gradient-to-r from-[#039855] to-[#12B76A] hover:opacity-95 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-md shadow-blue-500/20"
               />
             </div>
