@@ -50,3 +50,19 @@ export async function sendOtpEmail(opts: {
       </div>`,
   });
 }
+
+export async function sendResetCodeEmail(to: string, code: string): Promise<void> {
+  await getTransporter().sendMail({
+    from: process.env.SMTP_FROM || `LogiPulse <${process.env.SMTP_USER}>`,
+    to,
+    subject: `${code} is your LogiPulse password reset code`,
+    text: `Your LogiPulse password reset code is ${code}. It expires in 15 minutes. If you didn't ask for this, ignore this email.`,
+    html: `
+      <div style="font-family:Segoe UI,Arial,sans-serif;max-width:480px;margin:auto;padding:24px;border:1px solid #dde5e0;border-radius:16px">
+        <h2 style="margin:0 0 12px;color:#027A48">LogiPulse password reset</h2>
+        <p style="font-size:14px;color:#141a16">Your reset code:</p>
+        <p style="font-size:34px;letter-spacing:8px;font-weight:800;color:#039855;margin:8px 0 16px">${code}</p>
+        <p style="font-size:12px;color:#93a199">Expires in 15 minutes. Never share it. If you didn't ask for this, ignore this email.</p>
+      </div>`,
+  });
+}
